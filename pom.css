@@ -1,0 +1,54 @@
+/* POM Games — shared styles (SUNY Brockport green & gold) */
+:root{
+  --green:#00533e; --green2:#0b6b52; --gold:#f2b632; --goldsoft:#fdf1d3;
+  --paper:#f5f3ee; --card:#ffffff; --ink:#18201d; --muted:#5d6762; --rule:#d8ddd8; --soft:#eef3f0;
+  --good:#2e7d4f; --bad:#b23a2b; --a:#00533e; --b:#d08a00;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3{font-family:"Fraunces",Georgia,serif;line-height:1.2}
+a{color:var(--green2)}
+.topbar{background:var(--green);color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:4px solid var(--gold)}
+.topbar .brand{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:19px;color:#fff;text-decoration:none}
+.topbar .brand small{font-family:Inter,sans-serif;font-weight:500;font-size:12px;opacity:.8;margin-left:8px}
+.topbar .who{font-size:13px;opacity:.9}
+.wrap{max-width:1100px;margin:0 auto;padding:20px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:18px;margin-bottom:16px}
+.card h2{margin:0 0 10px;font-size:20px}
+.card h3{margin:0 0 8px;font-size:15px;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+label{display:block;font-weight:600;font-size:12px;margin:10px 0 4px;color:var(--muted)}
+input,select,textarea{width:100%;font:inherit;padding:9px 10px;border:1px solid var(--rule);border-radius:8px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);border-color:var(--gold)}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;background:var(--green);color:#fff}
+button:hover{background:var(--green2)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.gold{background:var(--gold);color:var(--ink)}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--rule)}
+button.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+button.sm{padding:5px 10px;font-size:12px}
+.full{width:100%}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.err{color:var(--bad);font-size:13px;min-height:1em;margin-top:8px}
+.ok{color:var(--good)}
+.demo{background:#fff4c2;border:1px solid #e4cf6a;color:#5b4b00;font-size:13px;border-radius:8px;padding:8px 12px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:10px 12px}
+.kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+.kpi .v{font-family:"Fraunces",Georgia,serif;font-size:24px;font-weight:700}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+tr.total td{font-weight:700;border-top:2px solid var(--ink)}
+.pill{display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600;vertical-align:2px}
+.pill.a{background:#d6ece4;color:var(--a)} .pill.b{background:#fbe7bd;color:#7a5200}
+.pill.open{background:#dcefdc;color:#2f6b3a} .pill.closed{background:#eee;color:#666}
+.badge{display:inline-block;background:var(--goldsoft);border:1px solid var(--gold);border-radius:8px;padding:8px 12px}
+.center{text-align:center}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}

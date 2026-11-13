@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POM Games — Instructor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="pom.css">
+<script src="vendor/supabase.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="pom.js"></script>
+<script src="games.js"></script>
+<!-- one model + dashboard per live game -->
+<script src="games/productivity/model.js"></script>
+<script src="games/productivity/dashboard.js"></script>
+<style>
+  .layout{display:grid;grid-template-columns:310px 1fr;gap:18px;max-width:1400px;margin:0 auto;padding:18px}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+  .sess{padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;margin-bottom:4px}
+  .sess:hover{background:var(--soft)} .sess.active{background:var(--soft);border-color:var(--rule)}
+  .sess .code{font-weight:700;font-family:ui-monospace,Menlo,monospace}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .link{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all;background:var(--soft);padding:8px 10px;border-radius:8px}
+  .joinbox{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .joinbox img{width:150px;height:150px;border:1px solid var(--rule);border-radius:8px;background:#fff}
+  .bigcode{font-family:"Fraunces",Georgia,serif;font-size:40px;font-weight:700;letter-spacing:2px;color:var(--green)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+</style>
+</head>
+<body>
+<div class="topbar"><a class="brand" href="./">POM Games <small>Instructor</small></a>
+  <span class="who"><span id="who"></span> <button id="btnOut" class="ghost sm hidden" style="color:#fff;border-color:#fff8">Sign out</button></span></div>
+<div id="demoBanner" class="demo hidden" style="margin:12px 18px 0">Demo mode: each session shows a simulated class. Add your Supabase keys in <code>config.js</code> to use real data.</div>
+
+<section id="sLogin" class="card hidden" style="max-width:380px;margin:40px auto">
+  <h2>Instructor sign-in</h2>
+  <p class="small muted">Use the same login as the newsvendor game.</p>
+  <label for="email">Email</label><input id="email" type="email" autocomplete="username">
+  <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+  <button id="btnLogin" class="full" style="margin-top:14px">Sign in</button>
+  <div class="err" id="loginErr"></div>
+</section>
+
+<div id="sApp" class="layout hidden">
+  <aside>
+    <div class="card">
+      <h2>New session</h2>
+      <label for="nGame">Game</label><select id="nGame"></select>
+      <label for="nTitle">Title</label><input id="nTitle">
+      <label for="nCode">Code students type</label><input id="nCode" style="text-transform:uppercase">
+      <div id="nParams"></div>
+      <button id="btnCreate" class="full" style="margin-top:12px">Create session</button>
+      <div class="err" id="createErr"></div>
+    </div>
+    <div class="card">
+      <h2>Sessions</h2>
+      <select id="fGame" style="margin-bottom:8px"></select>
+      <div id="sessList"></div>
+    </div>
+  </aside>
+  <main>
+    <div id="empty" class="card"><h2>Pick or create a session</h2><p class="muted">Each session is one class run of one game. Students join with its code.</p></div>
+    <div id="view" class="hidden">
+      <div class="card">
+        <div class="toolbar">
+          <h2 style="margin:0;flex:1" id="vTitle"></h2>
+          <label style="display:flex;gap:6px;align-items:center;margin:0;font-size:13px;color:var(--ink)"><input type="checkbox" id="live" style="width:auto" checked> Live (5 s)</label>
+          <button class="ghost sm" id="btnRefresh">Refresh</button>
+          <button class="ghost sm" id="btnToggle"></button>
+          <button class="ghost sm" id="btnCsvE">Export events CSV</button>
+          <button class="ghost sm" id="btnCsvP">Export students CSV</button>
+          <button class="danger sm" id="btnDel">Delete</button>
+        </div>
+        <div class="joinbox">
+          <div><div class="small muted">Session code</div><div class="bigcode" id="vCode"></div></div>
+          <img id="qr" alt="QR code for the student link">
+          <div style="flex:1;min-width:240px"><div class="small muted">Student link</div><div class="link" id="vLink"></div>
+            <button class="ghost sm" id="btnCopy" style="margin-top:6px">Copy link</button> <span class="small muted" id="vParams"></span></div>
+        </div>
+      </div>
+      <div id="dash"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = POM.$, DEMO = POM.DEMO, cfg = window.POM_CONFIG || {};
+const LIVE_GAMES = window.POM_CATALOG.filter(g => g.status === "live" && window.POM_GAMES[g.key]);
+let sb = null, sessions = [], current = null, timer = null, lastData = null;
+
+// ---------------- data layer ----------------
+const api = DEMO ? demoApi() : supaApi();
+function supaApi() {
+  sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
+  const chk = (r) => { if (r.error) throw new Error(r.error.message); return r.data; };
+  return {
+    async user() { const { data } = await sb.auth.getUser(); return data.user; },
+    async login(e, p) { const { data, error } = await sb.auth.signInWithPassword({ email: e, password: p }); if (error) throw error; return data.user; },
+    async logout() { await sb.auth.signOut(); },
+    async sessions() { return chk(await sb.from("pom_sessions").select("*").order("created_at", { ascending: false })); },
+    async create(row) { return chk(await sb.from("pom_sessions").insert(row).select().single()); },
+    async setOpen(id, v) { chk(await sb.from("pom_sessions").update({ is_open: v }).eq("id", id)); },
+    async remove(id) { chk(await sb.from("pom_sessions").delete().eq("id", id)); },
+    async load(id) {
+      const players = chk(await sb.from("pom_players").select("id,nickname,student_ref,condition,summary,joined_at,finished_at").eq("session_id", id));
+      let events = [], from = 0;
+      for (;;) { const r = chk(await sb.from("pom_events").select("player_id,round,kind,data,created_at,updated_at").eq("session_id", id).order("id").range(from, from + 999));
+        events = events.concat(r); if (r.length < 1000) break; from += 1000; }
+      return { players, events };
+    }
+  };
+}
+function demoApi() {
+  const list = LIVE_GAMES.map((g, i) => ({ id: "demo" + i, game: g.key, code: (window.POM_GAMES[g.key].codePrefix || "DEMO") + "1", title: "Simulated class",
+    params: { ...window.POM_GAMES[g.key].defaults, seed: 12345 }, is_open: true, created_at: new Date().toISOString() }));
+  const cache = {};
+  return { async user() { return { email: "demo@example.edu" }; }, async login() { return { email: "demo@example.edu" }; }, async logout() {},
+    async sessions() { return list; }, async create(r) { const s = { ...r, id: "demo" + list.length, params: { ...r.params, seed: 777 }, is_open: true, created_at: new Date().toISOString() }; list.unshift(s); return s; },
+    async setOpen(id, v) { list.find(s => s.id === id).is_open = v; }, async remove(id) { list.splice(list.findIndex(s => s.id === id), 1); },
+    async load(id) { const s = list.find(x => x.id === id); return cache[id] || (cache[id] = window.POM_GAMES[s.game].demo(s)); } };
+}
+
+// ---------------- auth ----------------
+async function start() {
+  if (DEMO) $("demoBanner").classList.remove("hidden");
+  const u = await api.user().catch(() => null);
+  if (u) return enter(u);
+  $("sLogin").classList.remove("hidden");
+}
+async function enter(u) {
+  $("sLogin").classList.add("hidden"); $("sApp").classList.remove("hidden");
+  $("who").textContent = u.email; $("btnOut").classList.remove("hidden");
+  $("nGame").innerHTML = LIVE_GAMES.map(g => `<option value="${g.key}">${g.chapter} · ${g.title}</option>`).join("");
+  $("fGame").innerHTML = `<option value="">All games</option>` + window.POM_CATALOG.map(g => `<option value="${g.key}">${g.chapter} · ${g.title}</option>`).join("");
+  newForm(); await refreshList();
+}
+
+// ---------------- create ----------------
+function suggestCode(prefix) { return (prefix || "POM") + Math.floor(10 + Math.random() * 90); }
+function newForm() {
+  const m = window.POM_GAMES[$("nGame").value]; if (!m) return;
+  $("nTitle").value = m.title + " — " + new Date().toLocaleDateString();
+  $("nCode").value = suggestCode(m.codePrefix);
+  $("nParams").innerHTML = m.params.map(p => {
+    const v = m.defaults[p.key];
+    if (p.type === "select") return `<label>${p.label}</label><select data-k="${p.key}">${p.options.map(([val, lab]) => `<option value="${val}" ${String(v) === val ? "selected" : ""}>${lab}</option>`).join("")}</select>`;
+    return `<label>${p.label}</label><input data-k="${p.key}" type="number" value="${v}" ${p.step ? `step="${p.step}"` : ""} ${p.min != null ? `min="${p.min}"` : ""} ${p.max != null ? `max="${p.max}"` : ""}>`;
+  }).join("");
+}
+async function create() {
+  $("createErr").textContent = "";
+  const m = window.POM_GAMES[$("nGame").value], params = { ...m.defaults };
+  $("nParams").querySelectorAll("[data-k]").forEach(el => {
+    const p = m.params.find(x => x.key === el.dataset.k); let v = el.value;
+    if (p.type === "number") v = Number(v); else if (v === "true" || v === "false") v = v === "true";
+    params[p.key] = v;
+  });
+  const code = $("nCode").value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,12}$/.test(code)) { $("createErr").textContent = "Code: 3–12 letters or digits."; return; }
+  try { const s = await api.create({ game: m.key, code, title: $("nTitle").value.trim() || m.title, params });
+        await refreshList(); select(s.id); newForm(); }
+  catch (e) { $("createErr").textContent = /duplicate|unique/.test(e.message) ? "That code is already used. Pick another one." : e.message; }
+}
+
+// ---------------- list & view ----------------
+async function refreshList() {
+  sessions = await api.sessions();
+  const f = $("fGame").value, cat = Object.fromEntries(window.POM_CATALOG.map(g => [g.key, g]));
+  $("sessList").innerHTML = sessions.filter(s => !f || s.game === f).map(s => `<div class="sess ${current && current.id === s.id ? "active" : ""}" data-id="${s.id}">
+      <span class="code">${POM.esc(s.code)}</span><span class="pill ${s.is_open ? "open" : "closed"}">${s.is_open ? "open" : "closed"}</span>
+      <div class="small">${POM.esc(s.title)}</div><div class="small muted">${cat[s.game] ? cat[s.game].chapter + " · " : ""}${new Date(s.created_at).toLocaleString()}</div></div>`).join("")
+    || `<p class="small muted">No sessions yet.</p>`;
+  $("sessList").querySelectorAll(".sess").forEach(d => d.onclick = () => select(d.dataset.id));
+}
+function studentLink(s) { return new URL(`games/${s.game}/?code=${encodeURIComponent(s.code)}`, location.href).href; }
+async function select(id) {
+  current = sessions.find(s => s.id === id); if (!current) return;
+  $("empty").classList.add("hidden"); $("view").classList.remove("hidden");
+  $("vTitle").textContent = current.title; $("vCode").textContent = current.code;
+  const link = studentLink(current); $("vLink").textContent = link;
+  $("qr").src = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=" + encodeURIComponent(link);
+  const m = window.POM_GAMES[current.game];
+  $("vParams").textContent = m ? m.params.map(p => `${p.label.split(" (")[0]}: ${current.params[p.key]}`).join(" · ") : "";
+  $("btnToggle").textContent = current.is_open ? "Close session" : "Reopen session";
+  document.querySelectorAll(".sess").forEach(d => d.classList.toggle("active", d.dataset.id === id));
+  await loadData();
+}
+async function loadData() {
+  if (!current) return;
+  const m = window.POM_GAMES[current.game];
+  if (!m) { $("dash").innerHTML = `<div class="card">No dashboard for game "${POM.esc(current.game)}".</div>`; return; }
+  try { lastData = await api.load(current.id); m.render($("dash"), current, lastData); }
+  catch (e) { $("dash").innerHTML = `<div class="card err">${POM.esc(e.message)}</div>`; }
+}
+function tick() { clearInterval(timer); timer = setInterval(() => { if ($("live").checked && current && !document.hidden) loadData(); }, 5000); }
+
+// ---------------- CSV ----------------
+function csv(rows) {
+  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const q = (v) => { if (v == null) return ""; if (typeof v === "object") v = JSON.stringify(v); v = String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  return [cols.join(",")].concat(rows.map(r => cols.map(c => q(r[c])).join(","))).join("\n");
+}
+function download(name, text) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = name; a.click(); }
+function exportEvents() {
+  if (!lastData) return; const P = Object.fromEntries(lastData.players.map(p => [p.id, p]));
+  download(`${current.code}_events.csv`, csv(lastData.events.map(e => ({ session: current.code, game: current.game,
+    nickname: (P[e.player_id] || {}).nickname, student_ref: (P[e.player_id] || {}).student_ref, condition: (P[e.player_id] || {}).condition,
+    round: e.round, kind: e.kind, ...(e.data || {}) }))));
+}
+function exportPlayers() {
+  if (!lastData) return;
+  download(`${current.code}_students.csv`, csv(lastData.players.map(p => ({ session: current.code, nickname: p.nickname, student_ref: p.student_ref,
+    condition: p.condition, joined_at: p.joined_at, finished_at: p.finished_at, ...(p.summary || {}) }))));
+}
+
+// ---------------- wiring ----------------
+$("btnLogin").onclick = async () => { $("loginErr").textContent = ""; try { enter(await api.login($("email").value.trim(), $("pw").value)); } catch (e) { $("loginErr").textContent = e.message; } };
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("btnLogin").click(); });
+$("btnOut").onclick = async () => { await api.logout(); location.reload(); };
+$("nGame").onchange = newForm; $("btnCreate").onclick = create; $("fGame").onchange = refreshList;
+$("btnRefresh").onclick = loadData;
+$("btnToggle").onclick = async () => { await api.setOpen(current.id, !current.is_open); await refreshList(); select(current.id); };
+$("btnDel").onclick = async () => {
+  if (prompt(`Delete session ${current.code} and ALL its data? Type the code to confirm.`) !== current.code) return;
+  await api.remove(current.id); current = null; $("view").classList.add("hidden"); $("empty").classList.remove("hidden"); refreshList();
+};
+$("btnCopy").onclick = () => navigator.clipboard.writeText($("vLink").textContent).then(() => { $("btnCopy").textContent = "Copied ✔"; setTimeout(() => $("btnCopy").textContent = "Copy link", 1500); });
+$("btnCsvE").onclick = exportEvents; $("btnCsvP").onclick = exportPlayers;
+tick(); start();
+</script>
+</body>
+</html>

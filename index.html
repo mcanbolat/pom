@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POM Games — BUS361 Production &amp; Operations Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="pom.css">
+<script src="games.js"></script>
+<style>
+  .hero{background:linear-gradient(135deg,var(--green) 0%,#0d3d31 100%);color:#fff;padding:42px 20px 36px}
+  .hero .in{max-width:1100px;margin:0 auto}
+  .hero h1{font-size:40px;margin:0 0 8px}
+  .hero p{max-width:640px;opacity:.9;margin:0}
+  .hero .join{margin-top:20px;display:flex;gap:8px;max-width:420px}
+  .hero .join input{font-size:17px;text-transform:uppercase;letter-spacing:1px}
+  .weeks{max-width:1100px;margin:0 auto;padding:24px 20px}
+  .wk{margin-bottom:22px}
+  .wk h2{font-size:15px;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px;border-bottom:2px solid var(--gold);display:inline-block;padding-bottom:3px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .tile{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:16px;text-decoration:none;color:var(--ink);display:flex;flex-direction:column;gap:6px;transition:transform .12s,box-shadow .12s}
+  a.tile:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08);border-color:var(--green)}
+  .tile .ch{font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.8px}
+  .tile h3{margin:0;font-size:19px}
+  .tile p{margin:0;font-size:14px;color:var(--muted)}
+  .tile.soon{opacity:.6}
+  .tile .st{margin-top:auto;font-size:12px;font-weight:600}
+  footer{max-width:1100px;margin:0 auto;padding:10px 20px 40px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="topbar"><span class="brand">POM Games <small>BUS361 · SUNY Brockport</small></span><a href="admin.html" style="color:#fff;font-size:13px">Instructor</a></div>
+<div class="hero"><div class="in">
+  <h1>Learn operations by running them.</h1>
+  <p>Short games and simulations for each topic in Production &amp; Operations Management (Heizer, Render &amp; Munson). Got a session code from class? Enter it here.</p>
+  <div class="join"><input id="code" placeholder="Session code" autocomplete="off"><button class="gold" id="go">Go</button></div>
+  <div class="err" id="err" style="color:#ffd0c8"></div>
+</div></div>
+<div class="weeks" id="weeks"></div>
+<footer>Your instructor sees the nickname you choose and, if you enter it, your student ID. Session codes are given in class.</footer>
+<script>
+const cat = window.POM_CATALOG;
+const prefixes = { BAKE: "productivity" };   // code prefix → game, for the quick-join box
+document.getElementById("weeks").innerHTML = [1, 2, 3, 4, 5].map(w => `<div class="wk"><h2>Week ${w}</h2><div class="tiles">` +
+  cat.filter(g => g.week === w).map(g => g.status === "live"
+    ? `<a class="tile" href="games/${g.key}/"><span class="ch">${g.chapter} · ${g.topic}</span><h3>${g.title}</h3><p>${g.blurb}</p><span class="st ok">▶ Play</span></a>`
+    : `<div class="tile soon"><span class="ch">${g.chapter} · ${g.topic}</span><h3>${g.title}</h3><p>${g.blurb}</p><span class="st muted">Coming soon</span></div>`).join("") +
+  `</div></div>`).join("");
+function go() {
+  const c = document.getElementById("code").value.trim().toUpperCase(); if (!c) return;
+  const pre = Object.keys(prefixes).find(p => c.startsWith(p));
+  if (pre) location.href = `games/${prefixes[pre]}/?code=${encodeURIComponent(c)}`;
+  else document.getElementById("err").textContent = "Not sure which game that code is for. Open the game from the list below and enter the code there.";
+}
+document.getElementById("go").onclick = go;
+document.getElementById("code").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+</script>
+</body>
+</html>
