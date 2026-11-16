@@ -17,6 +17,8 @@ These are short web games, one per topic in Heizer, Render & Munson (14e), that 
 
 **Demo mode.** Add `?demo` to any page URL to try it without saving anything.
 
+**Publishing an update.** Bump the number in `version.txt` and the `V="…"` and `?v=…` values in the pages. Open pages then reload themselves automatically.
+
 **Adding a game.** Add `games/<key>/` with `index.html`, `model.js` and `dashboard.js` (copy the productivity game as a template), set its status to `"live"` in `games.js`, and add its two script tags to `admin.html`. You don't need to change the database.
 
 ## Games
