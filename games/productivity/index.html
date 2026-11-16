@@ -6,12 +6,12 @@
 <title>Bakery Productivity Challenge — POM Games</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../../pom.css">
-<script src="../../vendor/supabase.js"></script>
-<script src="../../vendor/chart.umd.min.js"></script>
-<script src="../../config.js"></script>
-<script src="../../pom.js"></script>
-<script src="model.js"></script>
+<link rel="stylesheet" href="../../pom.css?v=3">
+<script src="../../vendor/supabase.js?v=3"></script>
+<script src="../../vendor/chart.umd.min.js?v=3"></script>
+<script src="../../config.js?v=3"></script>
+<script src="../../pom.js?v=3"></script>
+<script src="model.js?v=3"></script>
 <style>
   .stepper{display:flex;align-items:center;gap:8px}
   .stepper button{width:40px;padding:8px 0;font-size:18px}
@@ -75,9 +75,9 @@
         <p class="small muted">5 bakers, 1 oven, no equipment</p>
         <table id="bBase"></table>
         <p class="small" style="margin-top:10px">
-          <span class="formula">Output ($) = loaves × price</span><br>
-          <span class="formula" style="margin-top:4px">Labor productivity = output $ ÷ labor $</span><br>
-          <span class="formula" style="margin-top:4px">Multifactor productivity = output $ ÷ (labor + materials + energy + capital + other $)</span>
+          <span class="formula">Revenue = loaves × price</span><br>
+          <span class="formula" style="margin-top:4px">Labor productivity = revenue ÷ labor $</span><br>
+          <span class="formula" style="margin-top:4px">Multifactor productivity = revenue ÷ (labor + materials + energy + capital + other $)</span>
         </p>
         <button id="btnStart" class="full gold" style="margin-top:8px">Start week 1 →</button>
       </div>
@@ -110,8 +110,8 @@
         <div id="quizWrap">
           <p class="small" style="margin:12px 0 0"><b>Your turn:</b> work out this week's productivity. You have 3 tries for each.</p>
           <div class="quiz">
-            <div class="qbox" id="qLP"><label for="aLP">Labor productivity ($ output per $ labor, 2 decimals)</label><input id="aLP" inputmode="decimal" autocomplete="off"><div class="small" id="fLP"></div></div>
-            <div class="qbox" id="qMFP"><label for="aMFP">Multifactor productivity ($ output per $ input, 3 decimals)</label><input id="aMFP" inputmode="decimal" autocomplete="off"><div class="small" id="fMFP"></div></div>
+            <div class="qbox" id="qLP"><label for="aLP">Labor productivity (revenue ÷ labor $, 2 decimals)</label><input id="aLP" inputmode="decimal" autocomplete="off"><div class="small" id="fLP"></div></div>
+            <div class="qbox" id="qMFP"><label for="aMFP">Multifactor productivity (revenue ÷ total input $, 3 decimals)</label><input id="aMFP" inputmode="decimal" autocomplete="off"><div class="small" id="fMFP"></div></div>
           </div>
           <button id="btnCheck" style="margin-top:10px">Check</button>
         </div>
@@ -184,7 +184,7 @@ async function doJoin() {
 // ------------------------------------------------------------ briefing
 function inputsTable(w, hlKeys) {
   const line = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
-  return line("Output (loaves)", POM.fmt(w.out)) + line(`Output value (× ${POM.money(P.price, 2)})`, POM.money(w.revenue, 2)) + line("Labor-hours", POM.fmt(w.laborHours)) +
+  return line("Output (loaves)", POM.fmt(w.out)) + line(`Revenue (${POM.fmt(w.out)} × ${POM.money(P.price, 2)})`, POM.money(w.revenue, 2)) + line("Labor-hours", POM.fmt(w.laborHours)) +
     line("Labor cost", POM.money(w.labor)) + line("Materials", POM.money(w.materials, 2)) +
     line("Energy", POM.money(w.energy)) + line("Capital (ovens & leases)", POM.money(w.capital)) +
     line("Other (training)", POM.money(w.training_cost)) +
@@ -287,9 +287,9 @@ function updateQuiz() {
   if (fin) {
     $("answers").classList.remove("hidden");
     $("answers").innerHTML = `<div class="badge small">
-      Output = ${POM.fmt(r.out)} loaves × ${POM.money(P.price, 2)} = <b>${POM.money(r.revenue, 2)}</b><br>
-      Labor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.labor, 2)} = <b>${r.lp.toFixed(2)}</b> ($ output per $ labor)<br>
-      Multifactor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.total, 2)} = <b>${r.mfp.toFixed(3)}</b> ($ output per $ input)<br>
+      Revenue = ${POM.fmt(r.out)} loaves × ${POM.money(P.price, 2)} = <b>${POM.money(r.revenue, 2)}</b><br>
+      Labor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.labor, 2)} = <b>${r.lp.toFixed(2)}</b> (revenue per $ of labor)<br>
+      Multifactor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.total, 2)} = <b>${r.mfp.toFixed(3)}</b> (revenue per $ of input)<br>
       Profit = ${POM.money(r.revenue, 2)} − ${POM.money(r.total, 2)} = <b>${POM.money(r.profit)}</b></div>`;
     renderHistory();
   } else $("answers").classList.add("hidden");
@@ -323,7 +323,7 @@ function renderHistory() {
   if (chart) { chart.data = data; chart.update(); return; }
   chart = new Chart($("chart"), { type: "line", data, options: { maintainAspectRatio: false, animation: false,
     plugins: { legend: { position: "bottom" } },
-    scales: { y: { title: { display: true, text: "$ output / $ labor" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "$ output / $ input" } } } } });
+    scales: { y: { title: { display: true, text: "revenue / labor $" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "revenue / input $" } } } } });
 }
 
 // ------------------------------------------------------------ finish

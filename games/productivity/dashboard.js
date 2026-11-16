@@ -72,7 +72,7 @@
         .concat([{ label: "Before the game", data: [{ x: base.lp, y: base.mfp, n: "Before" }], backgroundColor: "#888", pointStyle: "rect", pointRadius: 8 }]) },
       options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom" },
         tooltip: { callbacks: { label: (t) => `${t.raw.n}: LP ${f(t.raw.x, 2)}, MFP ${f(t.raw.y, 3)}` } } },
-        scales: { x: { title: { display: true, text: "Avg labor productivity ($ output / $ labor)" } }, y: { title: { display: true, text: "Avg MFP ($ output / $ input)" } } } } }));
+        scales: { x: { title: { display: true, text: "Avg labor productivity (revenue / labor $)" } }, y: { title: { display: true, text: "Avg MFP (revenue / input $)" } } } } }));
 
     const rowsOf = (c) => A.played.filter(p => p.condition === c).flatMap(p => p.weeks);
     const metrics = [
@@ -100,10 +100,10 @@
     const g = (c, k) => mean(A.played.filter(p => p.condition === c).map(p => p.s[k]));
     const two = A.conds.length === 2;
     $("debrief").innerHTML = `<ol style="margin:0;padding-left:18px">
-      <li><b>Productivity = output ÷ input, both in $.</b> Before the game: output = ${base.out.toLocaleString()} loaves × $${P.price.toFixed(2)} = $${base.revenue.toLocaleString()}. LP = $${base.revenue.toLocaleString()} ÷ $${base.labor.toLocaleString()} labor = ${f(base.lp, 2)}; MFP = $${base.revenue.toLocaleString()} ÷ $${base.total.toLocaleString()} total input = ${f(base.mfp, 3)}.</li>
-      <li><b>MFP above 1.00 means profit.</b> When everything is in dollars, MFP &gt; 1 exactly when output is worth more than all the inputs. Labor productivity can be well above 1 while the bakery loses money.</li>
+      <li><b>Productivity = output ÷ input, both in $.</b> Before the game: revenue = ${base.out.toLocaleString()} loaves × $${P.price.toFixed(2)} = $${base.revenue.toLocaleString()}. LP = $${base.revenue.toLocaleString()} ÷ $${base.labor.toLocaleString()} labor = ${f(base.lp, 2)}; MFP = $${base.revenue.toLocaleString()} ÷ $${base.total.toLocaleString()} total input = ${f(base.mfp, 3)}.</li>
+      <li><b>MFP above 1.00 means profit.</b> When everything is in dollars, MFP &gt; 1 exactly when revenue exceeds the cost of all inputs. Labor productivity can be well above 1 while the bakery loses money.</li>
       ${two ? `<li><b>You get what you measure.</b> The LP group averaged LP ${f(g("labor", "avg_lp"), 2)} and MFP ${f(g("labor", "avg_mfp"), 3)}, with total profit of ${money(g("labor", "total_profit"))}. The MFP group averaged LP ${f(g("mfp", "avg_lp"), 2)} and MFP ${f(g("mfp", "avg_mfp"), 3)}, with total profit of ${money(g("mfp", "total_profit"))}. Ask: which manager would you hire?</li>` : ""}
-      <li><b>Single-factor measures can mislead.</b> You can raise labor productivity by cutting bakers and leasing machines. Output $ per labor $ goes up, but capital and energy costs go up as well, so output per dollar of <i>all</i> inputs may fall.</li>
+      <li><b>Single-factor measures can mislead.</b> You can raise labor productivity by cutting bakers and leasing machines. Revenue per labor $ goes up, but capital and energy costs go up as well, so output per dollar of <i>all</i> inputs may fall.</li>
       <li><b>Scale and bottlenecks.</b> The robot only pays for itself at high volume, and that needs more ovens. When the ovens are the bottleneck, extra bakers add cost but no output (this links to Ch. 7).</li>
       <li><b>Investment timing.</b> Training lowers MFP in the week you pay for it and raises it in every week after that. Productivity growth = (new − old) ÷ old.</li>
       <li>Heizer's three productivity variables are <b>labor</b> (training), <b>capital</b> (ovens, mixer, robot) and <b>management</b> (how you combine them). Which one did each group lean on?</li></ol>`;

@@ -23,8 +23,8 @@
   };
   const BASELINE = { bakers: 5, ovens: 1, mixer: false, robot: false, training: false };
   const METRIC = {
-    labor: { key: "lp", name: "Labor productivity", unit: "$ of output per $ of labor", short: "LP" },
-    mfp:   { key: "mfp", name: "Multifactor productivity", unit: "$ of output per $ of all inputs", short: "MFP" }
+    labor: { key: "lp", name: "Labor productivity", unit: "revenue per $ of labor", short: "LP" },
+    mfp:   { key: "mfp", name: "Multifactor productivity", unit: "revenue per $ of all inputs", short: "MFP" }
   };
 
   // weekly efficiency shocks, identical for everyone in the session
