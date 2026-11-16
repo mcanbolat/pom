@@ -1,5 +1,6 @@
 // Bakery Productivity Challenge — shared model (used by the game and the dashboard).
-// Heizer, Render & Munson, Ch. 1: single-factor (labor) and multifactor productivity.
+// Heizer, Render & Munson, Ch. 1: single-factor (labor) and multifactor productivity,
+// both measured in dollars: LP = output $ / labor $, MFP = output $ / total input $.
 (function () {
   const DEFAULTS = {
     weeks: 8,
@@ -22,8 +23,8 @@
   };
   const BASELINE = { bakers: 5, ovens: 1, mixer: false, robot: false, training: false };
   const METRIC = {
-    labor: { key: "lp", name: "Labor productivity", unit: "loaves per labor-hour", short: "LP" },
-    mfp:   { key: "mfp", name: "Multifactor productivity", unit: "loaves per $ of input", short: "MFP" }
+    labor: { key: "lp", name: "Labor productivity", unit: "$ of output per $ of labor", short: "LP" },
+    mfp:   { key: "mfp", name: "Multifactor productivity", unit: "$ of output per $ of all inputs", short: "MFP" }
   };
 
   // weekly efficiency shocks, identical for everyone in the session
@@ -46,10 +47,11 @@
     const capital = d.ovens * P.oven_capital + (d.mixer ? P.mixer_lease : 0) + (d.robot ? P.robot_lease : 0);
     const training = d.training ? P.training_cost : 0;
     const total = +(labor + materials + energy + capital + training).toFixed(2);
+    const revenue = +(out * P.price).toFixed(2);   // output valued in $
     return {
       bakers: d.bakers, ovens: d.ovens, mixer: !!d.mixer, robot: !!d.robot, training: !!d.training, trained: !!t,
-      shock: shock || 1, out, laborHours, labor, materials, energy, capital, training_cost: training, total,
-      lp: out / laborHours, mfp: out / total, profit: +(out * P.price - total).toFixed(2),
+      shock: shock || 1, out, revenue, laborHours, labor, materials, energy, capital, training_cost: training, total,
+      lp: revenue / labor, mfp: revenue / total, profit: +(revenue - total).toFixed(2),
       oven_limited: laborCap > ovenCap
     };
   }

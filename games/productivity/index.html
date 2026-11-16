@@ -75,8 +75,9 @@
         <p class="small muted">5 bakers, 1 oven, no equipment</p>
         <table id="bBase"></table>
         <p class="small" style="margin-top:10px">
-          <span class="formula">Labor productivity = output ÷ labor-hours</span><br>
-          <span class="formula" style="margin-top:4px">Multifactor productivity = output ÷ (labor + materials + energy + capital + other $)</span>
+          <span class="formula">Output ($) = loaves × price</span><br>
+          <span class="formula" style="margin-top:4px">Labor productivity = output $ ÷ labor $</span><br>
+          <span class="formula" style="margin-top:4px">Multifactor productivity = output $ ÷ (labor + materials + energy + capital + other $)</span>
         </p>
         <button id="btnStart" class="full gold" style="margin-top:8px">Start week 1 →</button>
       </div>
@@ -109,8 +110,8 @@
         <div id="quizWrap">
           <p class="small" style="margin:12px 0 0"><b>Your turn:</b> work out this week's productivity. You have 3 tries for each.</p>
           <div class="quiz">
-            <div class="qbox" id="qLP"><label for="aLP">Labor productivity (loaves per labor-hour, 2 decimals)</label><input id="aLP" inputmode="decimal" autocomplete="off"><div class="small" id="fLP"></div></div>
-            <div class="qbox" id="qMFP"><label for="aMFP">Multifactor productivity (loaves per $, 4 decimals)</label><input id="aMFP" inputmode="decimal" autocomplete="off"><div class="small" id="fMFP"></div></div>
+            <div class="qbox" id="qLP"><label for="aLP">Labor productivity ($ output per $ labor, 2 decimals)</label><input id="aLP" inputmode="decimal" autocomplete="off"><div class="small" id="fLP"></div></div>
+            <div class="qbox" id="qMFP"><label for="aMFP">Multifactor productivity ($ output per $ input, 3 decimals)</label><input id="aMFP" inputmode="decimal" autocomplete="off"><div class="small" id="fMFP"></div></div>
           </div>
           <button id="btnCheck" style="margin-top:10px">Check</button>
         </div>
@@ -183,12 +184,12 @@ async function doJoin() {
 // ------------------------------------------------------------ briefing
 function inputsTable(w, hlKeys) {
   const line = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
-  return line("Output (loaves)", POM.fmt(w.out)) + line("Labor-hours", POM.fmt(w.laborHours)) +
+  return line("Output (loaves)", POM.fmt(w.out)) + line(`Output value (× ${POM.money(P.price, 2)})`, POM.money(w.revenue, 2)) + line("Labor-hours", POM.fmt(w.laborHours)) +
     line("Labor cost", POM.money(w.labor)) + line("Materials", POM.money(w.materials, 2)) +
     line("Energy", POM.money(w.energy)) + line("Capital (ovens & leases)", POM.money(w.capital)) +
     line("Other (training)", POM.money(w.training_cost)) +
     `<tr class="total"><td>Total input cost</td><td>${POM.money(w.total, 2)}</td></tr>` +
-    (hlKeys ? `<tr><td>Labor productivity</td><td>${w.lp.toFixed(2)}</td></tr><tr><td>Multifactor productivity</td><td>${w.mfp.toFixed(4)}</td></tr><tr><td>Profit (revenue − total cost)</td><td>${POM.money(w.profit)}</td></tr>` : "");
+    (hlKeys ? `<tr><td>Labor productivity</td><td>${w.lp.toFixed(2)}</td></tr><tr><td>Multifactor productivity</td><td>${w.mfp.toFixed(3)}</td></tr><tr><td>Profit (revenue − total cost)</td><td>${POM.money(w.profit)}</td></tr>` : "");
 }
 function brief() {
   $("bNick").textContent = S.nickname; $("bWeeks").textContent = P.weeks; $("bPrice").textContent = POM.money(P.price, 2);
@@ -271,7 +272,7 @@ function qState(k) { const ok = cur[k + "_ok"], t = cur[k + "_tries"]; return ok
 function updateQuiz() {
   const r = cur;
   if (!P.quiz) { $("quizWrap").classList.add("hidden"); }
-  [["lp", "LP", 2], ["mfp", "MFP", 4]].forEach(([k, K, dec]) => {
+  [["lp", "LP", 2], ["mfp", "MFP", 3]].forEach(([k, K, dec]) => {
     const s = qState(k), box = $("q" + K), inp = $("a" + K);
     box.className = "qbox" + (s === "ok" ? " good" : s === "out" ? " shown" : "");
     inp.disabled = s !== "open";
@@ -286,16 +287,17 @@ function updateQuiz() {
   if (fin) {
     $("answers").classList.remove("hidden");
     $("answers").innerHTML = `<div class="badge small">
-      Labor productivity = ${POM.fmt(r.out)} ÷ ${POM.fmt(r.laborHours)} = <b>${r.lp.toFixed(2)}</b> loaves per labor-hour<br>
-      Multifactor productivity = ${POM.fmt(r.out)} ÷ ${POM.money(r.total, 2)} = <b>${r.mfp.toFixed(4)}</b> loaves per $<br>
-      Profit = ${POM.fmt(r.out)} × ${POM.money(P.price, 2)} − ${POM.money(r.total, 2)} = <b>${POM.money(r.profit)}</b></div>`;
+      Output = ${POM.fmt(r.out)} loaves × ${POM.money(P.price, 2)} = <b>${POM.money(r.revenue, 2)}</b><br>
+      Labor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.labor, 2)} = <b>${r.lp.toFixed(2)}</b> ($ output per $ labor)<br>
+      Multifactor productivity = ${POM.money(r.revenue, 2)} ÷ ${POM.money(r.total, 2)} = <b>${r.mfp.toFixed(3)}</b> ($ output per $ input)<br>
+      Profit = ${POM.money(r.revenue, 2)} − ${POM.money(r.total, 2)} = <b>${POM.money(r.profit)}</b></div>`;
     renderHistory();
   } else $("answers").classList.add("hidden");
 }
 async function check() {
   $("resErr").textContent = "";
   const r = { ...cur };
-  [["lp", "LP", 2], ["mfp", "MFP", 4]].forEach(([k, K, dec]) => {
+  [["lp", "LP", 2], ["mfp", "MFP", 3]].forEach(([k, K, dec]) => {
     if (qState(k) !== "open") return;
     const v = $("a" + K).value.trim(); if (!v) return;
     r[k + "_tries"]++; r[k + "_ok"] = PROD.close(v, r[k], dec);
@@ -311,8 +313,8 @@ function next() { if (rows.length >= P.weeks) { show("sReflect"); return; } play
 function renderHistory() {
   const done = rows.filter(quizDone), m = metric().key, b0 = PROD.week(P, PROD.BASELINE, false, 1);
   $("hist").innerHTML = `<tr><th>Week</th><th>Bakers</th><th>Ovens</th><th>Mixer</th><th>Robot</th><th>Trained</th><th>Output</th><th>Total cost</th><th class="${m === "lp" ? "hl" : ""}">LP</th><th class="${m === "mfp" ? "hl" : ""}">MFP</th><th>Profit</th></tr>` +
-    `<tr class="muted"><td>Before</td><td>${b0.bakers}</td><td>${b0.ovens}</td><td>–</td><td>–</td><td>–</td><td>${POM.fmt(b0.out)}</td><td>${POM.money(b0.total, 2)}</td><td>${b0.lp.toFixed(2)}</td><td>${b0.mfp.toFixed(4)}</td><td>${POM.money(b0.profit)}</td></tr>` +
-    done.map(r => `<tr><td>${r.week}</td><td>${r.bakers}</td><td>${r.ovens}</td><td>${r.mixer ? "✔" : ""}</td><td>${r.robot ? "✔" : ""}</td><td>${r.trained ? "✔" : ""}</td><td>${POM.fmt(r.out)}</td><td>${POM.money(r.total, 2)}</td><td class="${m === "lp" ? "hl" : ""}">${r.lp.toFixed(2)}</td><td class="${m === "mfp" ? "hl" : ""}">${r.mfp.toFixed(4)}</td><td>${POM.money(r.profit)}</td></tr>`).join("");
+    `<tr class="muted"><td>Before</td><td>${b0.bakers}</td><td>${b0.ovens}</td><td>–</td><td>–</td><td>–</td><td>${POM.fmt(b0.out)}</td><td>${POM.money(b0.total, 2)}</td><td>${b0.lp.toFixed(2)}</td><td>${b0.mfp.toFixed(3)}</td><td>${POM.money(b0.profit)}</td></tr>` +
+    done.map(r => `<tr><td>${r.week}</td><td>${r.bakers}</td><td>${r.ovens}</td><td>${r.mixer ? "✔" : ""}</td><td>${r.robot ? "✔" : ""}</td><td>${r.trained ? "✔" : ""}</td><td>${POM.fmt(r.out)}</td><td>${POM.money(r.total, 2)}</td><td class="${m === "lp" ? "hl" : ""}">${r.lp.toFixed(2)}</td><td class="${m === "mfp" ? "hl" : ""}">${r.mfp.toFixed(3)}</td><td>${POM.money(r.profit)}</td></tr>`).join("");
   const base = PROD.week(P, PROD.BASELINE, false, 1);
   const labels = ["Before"].concat(done.map(r => "W" + r.week));
   const data = { labels, datasets: [
@@ -321,7 +323,7 @@ function renderHistory() {
   if (chart) { chart.data = data; chart.update(); return; }
   chart = new Chart($("chart"), { type: "line", data, options: { maintainAspectRatio: false, animation: false,
     plugins: { legend: { position: "bottom" } },
-    scales: { y: { title: { display: true, text: "loaves / labor-hour" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "loaves / $" } } } } });
+    scales: { y: { title: { display: true, text: "$ output / $ labor" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "$ output / $ input" } } } } });
 }
 
 // ------------------------------------------------------------ finish
@@ -338,7 +340,7 @@ async function done() {
   const s = S.summary || PROD.summarize(P, rows, S.condition), m = metric();
   const pct = (x) => x == null ? "–" : (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
   $("kpis").innerHTML = [
-    ["Avg labor productivity", s.avg_lp.toFixed(2)], ["Avg multifactor productivity", s.avg_mfp.toFixed(4)],
+    ["Avg labor productivity", s.avg_lp.toFixed(2)], ["Avg multifactor productivity", s.avg_mfp.toFixed(3)],
     ["Total profit", POM.money(s.total_profit)], ["LP growth (wk 1 → last)", pct(s.lp_growth)], ["MFP growth (wk 1 → last)", pct(s.mfp_growth)]]
     .map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
   const other = S.condition === "labor" ? "multifactor productivity" : "labor productivity";
@@ -350,7 +352,7 @@ async function leaderboard() {
   try {
     const all = (await POM.leaderboard(S.session.code)) || [];
     const mine = all.filter(x => x.condition === S.condition && x.summary).sort((a, b) => b.summary.score - a.summary.score);
-    const dec = S.condition === "labor" ? 2 : 4;
+    const dec = S.condition === "labor" ? 2 : 3;
     $("lb").innerHTML = `<tr><th>#</th><th>Manager</th><th>${metric().short} (bonus)</th><th>Total profit</th></tr>` +
       mine.slice(0, 25).map((x, i) => `<tr class="${x.nickname === S.nickname ? "hl" : ""}"><td>${i + 1}</td><td style="text-align:left">${POM.esc(x.nickname)}</td><td>${(+x.summary.score).toFixed(dec)}</td><td>${POM.money(x.summary.total_profit)}</td></tr>`).join("");
   } catch (e) { $("lb").innerHTML = `<tr><td class="err">${POM.esc(e.message)}</td></tr>`; }
@@ -358,7 +360,7 @@ async function leaderboard() {
 function demoBots() {
   const names = ["CrustyCat", "Dough_Re_Mi", "RyeGuy", "KneadForSpeed", "LoafLover", "Sourdough_Sam"];
   return names.map((n, i) => { const c = i % 2 ? "labor" : "mfp";
-    return { nickname: n, condition: c, summary: { score: c === "labor" ? 8 + i * 0.9 : 0.26 + i * 0.012, total_profit: c === "labor" ? -2000 + i * 900 : 6000 + i * 1500 } }; });
+    return { nickname: n, condition: c, summary: { score: c === "labor" ? 2.1 + i * 0.25 : 1.04 + i * 0.05, total_profit: c === "labor" ? -2000 + i * 900 : 6000 + i * 1500 } }; });
 }
 
 // ------------------------------------------------------------ wiring

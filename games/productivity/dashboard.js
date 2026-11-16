@@ -64,15 +64,15 @@
         datasets: A.conds.map(c => ({ label: COND[c].label, data: [baseVal].concat(weeks.map(n => wk(c, n, k))), borderColor: COND[c].color, backgroundColor: COND[c].color, spanGaps: true }))},
       options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom" },
         tooltip: { callbacks: { label: (t) => `${t.dataset.label}: ${f(t.parsed.y, digits)}` } } } } }));
-    line("cLP", "lp", 2, base.lp); line("cMFP", "mfp", 4, base.mfp);
+    line("cLP", "lp", 2, base.lp); line("cMFP", "mfp", 3, base.mfp);
 
     charts.push(new Chart($("cSc"), { type: "scatter",
       data: { datasets: A.conds.map(c => ({ label: COND[c].label, backgroundColor: COND[c].color + "cc", pointRadius: 6,
         data: A.played.filter(p => p.condition === c).map(p => ({ x: p.s.avg_lp, y: p.s.avg_mfp, n: p.nickname })) }))
         .concat([{ label: "Before the game", data: [{ x: base.lp, y: base.mfp, n: "Before" }], backgroundColor: "#888", pointStyle: "rect", pointRadius: 8 }]) },
       options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom" },
-        tooltip: { callbacks: { label: (t) => `${t.raw.n}: LP ${f(t.raw.x, 2)}, MFP ${f(t.raw.y, 4)}` } } },
-        scales: { x: { title: { display: true, text: "Avg labor productivity (loaves / labor-hour)" } }, y: { title: { display: true, text: "Avg MFP (loaves / $)" } } } } }));
+        tooltip: { callbacks: { label: (t) => `${t.raw.n}: LP ${f(t.raw.x, 2)}, MFP ${f(t.raw.y, 3)}` } } },
+        scales: { x: { title: { display: true, text: "Avg labor productivity ($ output / $ labor)" } }, y: { title: { display: true, text: "Avg MFP ($ output / $ input)" } } } } }));
 
     const rowsOf = (c) => A.played.filter(p => p.condition === c).flatMap(p => p.weeks);
     const metrics = [
@@ -80,7 +80,7 @@
       ["Mixer used", r => share(r.map(w => w.mixer)), "%"], ["Robot used", r => share(r.map(w => w.robot)), "%"],
       ["Trained by last week", (r, c) => share(A.played.filter(p => p.condition === c).map(p => p.weeks.some(w => w.training))), "%"],
       ["Output (loaves)", r => mean(r.map(w => w.out)), 0], ["Labor productivity", r => mean(r.map(w => w.lp)), 2],
-      ["Multifactor productivity", r => mean(r.map(w => w.mfp)), 4], ["Profit per week", r => mean(r.map(w => w.profit)), "$"]];
+      ["Multifactor productivity", r => mean(r.map(w => w.mfp)), 3], ["Profit per week", r => mean(r.map(w => w.profit)), "$"]];
     $("tDec").innerHTML = `<tr><th></th><th>Before</th>${A.conds.map(c => `<th><span class="pill ${COND[c].cls}">${c === "labor" ? "LP group" : "MFP group"}</span></th>`).join("")}</tr>` +
       metrics.map(([lab, fn, d]) => {
         const bv = { "Bakers": 5, "Ovens": 1, "Mixer used": 0, "Robot used": 0, "Trained by last week": 0, "Output (loaves)": base.out,
@@ -100,9 +100,10 @@
     const g = (c, k) => mean(A.played.filter(p => p.condition === c).map(p => p.s[k]));
     const two = A.conds.length === 2;
     $("debrief").innerHTML = `<ol style="margin:0;padding-left:18px">
-      <li><b>Productivity = output ÷ input.</b> Before the game: LP = ${base.out} ÷ ${base.laborHours} = ${f(base.lp, 2)} loaves per labor-hour; MFP = ${base.out} ÷ $${base.total.toLocaleString()} = ${f(base.mfp, 4)} loaves per $.</li>
-      ${two ? `<li><b>You get what you measure.</b> The LP group averaged LP ${f(g("labor", "avg_lp"), 2)} and MFP ${f(g("labor", "avg_mfp"), 4)}, with total profit of ${money(g("labor", "total_profit"))}. The MFP group averaged LP ${f(g("mfp", "avg_lp"), 2)} and MFP ${f(g("mfp", "avg_mfp"), 4)}, with total profit of ${money(g("mfp", "total_profit"))}. Ask: which manager would you hire?</li>` : ""}
-      <li><b>Single-factor measures can mislead.</b> You can raise labor productivity by cutting bakers and leasing machines. Output per labor-hour goes up, but capital and energy costs go up as well, so output per dollar of <i>all</i> inputs may fall.</li>
+      <li><b>Productivity = output ÷ input, both in $.</b> Before the game: output = ${base.out.toLocaleString()} loaves × $${P.price.toFixed(2)} = $${base.revenue.toLocaleString()}. LP = $${base.revenue.toLocaleString()} ÷ $${base.labor.toLocaleString()} labor = ${f(base.lp, 2)}; MFP = $${base.revenue.toLocaleString()} ÷ $${base.total.toLocaleString()} total input = ${f(base.mfp, 3)}.</li>
+      <li><b>MFP above 1.00 means profit.</b> When everything is in dollars, MFP &gt; 1 exactly when output is worth more than all the inputs. Labor productivity can be well above 1 while the bakery loses money.</li>
+      ${two ? `<li><b>You get what you measure.</b> The LP group averaged LP ${f(g("labor", "avg_lp"), 2)} and MFP ${f(g("labor", "avg_mfp"), 3)}, with total profit of ${money(g("labor", "total_profit"))}. The MFP group averaged LP ${f(g("mfp", "avg_lp"), 2)} and MFP ${f(g("mfp", "avg_mfp"), 3)}, with total profit of ${money(g("mfp", "total_profit"))}. Ask: which manager would you hire?</li>` : ""}
+      <li><b>Single-factor measures can mislead.</b> You can raise labor productivity by cutting bakers and leasing machines. Output $ per labor $ goes up, but capital and energy costs go up as well, so output per dollar of <i>all</i> inputs may fall.</li>
       <li><b>Scale and bottlenecks.</b> The robot only pays for itself at high volume, and that needs more ovens. When the ovens are the bottleneck, extra bakers add cost but no output (this links to Ch. 7).</li>
       <li><b>Investment timing.</b> Training lowers MFP in the week you pay for it and raises it in every week after that. Productivity growth = (new − old) ÷ old.</li>
       <li>Heizer's three productivity variables are <b>labor</b> (training), <b>capital</b> (ovens, mixer, robot) and <b>management</b> (how you combine them). Which one did each group lean on?</li></ol>`;
@@ -111,7 +112,7 @@
     $("lbs").innerHTML = A.conds.map(c => {
       const l = A.players.filter(p => p.condition === c && p.s && p.finished_at).sort((a, b) => b.s.score - a.s.score).slice(0, 10);
       return `<p><span class="pill ${COND[c].cls}">${COND[c].label}</span></p><table><tr><th>#</th><th>Student</th><th>${c === "labor" ? "Avg LP" : "Avg MFP"}</th><th>Profit</th></tr>` +
-        l.map((p, i) => `<tr><td>${i + 1}</td><td style="text-align:left">${esc(p.nickname)}</td><td>${f(p.s.score, c === "labor" ? 2 : 4)}</td><td>${money(p.s.total_profit)}</td></tr>`).join("") + `</table>`;
+        l.map((p, i) => `<tr><td>${i + 1}</td><td style="text-align:left">${esc(p.nickname)}</td><td>${f(p.s.score, c === "labor" ? 2 : 3)}</td><td>${money(p.s.total_profit)}</td></tr>`).join("") + `</table>`;
     }).join("");
   }
 
