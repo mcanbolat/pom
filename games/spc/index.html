@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="6";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control Chart Detective — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=6">
+<script src="../../vendor/supabase.js?v=6"></script>
+<script src="../../vendor/chart.umd.min.js?v=6"></script>
+<script src="../../config.js?v=6"></script>
+<script src="../../pom.js?v=6"></script>
+<script src="../../pom-game.js?v=6"></script>
+<script src="model.js?v=6"></script>
+<style>
+  .verdict{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .verdict button.sel{outline:3px solid var(--gold)}
+  .fb{padding:10px 14px;border-radius:8px;margin-top:10px}
+  .fb.good{background:#eef8f1;border:1px solid var(--good)} .fb.bad{background:#fbeceb;border:1px solid var(--bad)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, G, answers, cx, cr;
+const f2 = (x) => Number(x).toFixed(2);
+
+POMGame.start({
+  game: "spc", chapter: "S6", topic: "Statistical Process Control", icon: "📈", title: "Control Chart Detective",
+  tagline: "Set up x̄ and R charts for a bottling line, then review production runs and catch the ones that are out of control.",
+  defaults: SPC.DEFAULTS,
+  bots: () => ["ShewhartSays", "SigmaSleuth", "RunRider", "UCLyde"].map((n, i) => ({ nickname: n, summary: { score: 30 - i * 3, false_alarms: i % 2, misses: i } })),
+  board: { label: "Detective score", fmt: (v) => v, cols: [["False alarms", (s) => s.false_alarms], ["Missed problems", (s) => s.misses]] },
+  run(ctx) { X = ctx; G = SPC.charts(ctx.P); answers = ctx.ev("chart"); route(); },
+  results: (s) => UI.kpis([["Detective score", `${s.score} / ${s.max}`], ["Verdicts right", `${s.verdicts} / ${s.n}`], ["False alarms", s.false_alarms], ["Missed problems", s.misses]]) +
+    `<div class="goal small">A <b>false alarm</b> (Type I error) means stopping a process that was fine. A <b>miss</b> (Type II error) means letting a process that has gone wrong keep running. Control limits at ±3σ keep false alarms rare. The run and trend rules help catch small shifts before a point ever crosses a limit.</div>`
+});
+
+function route() {
+  if (X.P.quiz && !X.ev("limits").length) return limits();
+  if (answers.length >= G.charts.length) return reflect();
+  chart(answers.length);
+}
+
+// ---------- 1. compute the limits ----------
+function limits() {
+  const L = G.L, P = X.P;
+  X.el.innerHTML = `<div class="card"><h2>Step 1: set up the control charts</h2>
+    <p>A bottling line fills ${P.target} ml bottles. Every hour, an inspector weighs <b>n = ${P.n}</b> bottles and records the sample mean and the sample range. Here are the first 20 samples, taken when the process was known to be running well:</p>
+    <div class="scroll">${UI.table(["Sample", ...L.samples.map((_, i) => i + 1)], [["x̄", ...L.samples.map((s) => s.mean.toFixed(1))], ["R", ...L.samples.map((s) => s.range.toFixed(1))]])}</div>
+    <p style="margin-top:12px">Average of the means <b>x̿ = ${f2(L.xbb)}</b> ml. Average range <b>R̄ = ${f2(L.rbar)}</b> ml. For n = 5, Heizer's Table S6.1 gives <b>A₂ = ${SPC.A2}</b>, <b>D₃ = ${SPC.D3}</b> and <b>D₄ = ${SPC.D4}</b>.</p>
+    <p class="small"><span class="formula">UCL(x̄) = x̿ + A₂·R̄</span> <span class="formula">LCL(x̄) = x̿ − A₂·R̄</span> <span class="formula">UCL(R) = D₄·R̄</span> <span class="formula">LCL(R) = D₃·R̄</span></p>
+    <div id="qq"></div><div id="after"></div></div>`;
+  UI.quiz(document.getElementById("qq"), [
+    { key: "ucl", label: "UCL for x̄ (ml, 2 decimals)", truth: L.ucl, dec: 2, tol: 0.0005 },
+    { key: "lcl", label: "LCL for x̄ (ml, 2 decimals)", truth: L.lcl, dec: 2, tol: 0.0005 },
+    { key: "uclr", label: "UCL for R (ml, 2 decimals)", truth: L.uclr, dec: 2, tol: 0.005 }], async (st) => {
+      try { await X.log(0, "limits", Object.fromEntries(Object.entries(st).flatMap(([k, v]) => [[k + "_tries", v.tries], [k + "_ok", v.ok], [k + "_answers", v.answers]]))); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">Your charts: x̄ from <b>${f2(L.lcl)}</b> to <b>${f2(L.ucl)}</b> ml; R from <b>0</b> to <b>${f2(L.uclr)}</b> ml. Now use them to review the production runs.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Review production runs →</button>`;
+      document.getElementById("bGo").onclick = () => chart(0);
+    });
+}
+
+// ---------- 2. review each run ----------
+function lineDs(label, v, n, color, dash) { return { label, data: Array(n).fill(v), borderColor: color, borderDash: dash || [6, 4], pointRadius: 0, borderWidth: 1.5, fill: false }; }
+function chart(i) {
+  const c = G.charts[i], L = G.L, n = c.pts.length, labels = c.pts.map((_, k) => k + 1);
+  let sel = null, verdict = null; const t0 = performance.now();
+  X.el.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2>Production run ${i + 1} of ${G.charts.length}</h2><span class="small muted">Click a point to mark the first sample that signals a problem.</span></div>
+    <div style="height:280px"><canvas id="cX"></canvas></div><div style="height:150px;margin-top:6px"><canvas id="cR"></canvas></div>
+    <div class="verdict"><button class="ghost" id="vIn">✔ In control</button><button class="ghost" id="vOut">⚠ Out of control</button></div>
+    <div id="outBox" class="hidden"><label>What pattern do you see?</label><select id="pat"><option value="">Choose…</option>${Object.entries(SPC.PATTERNS).filter(([k]) => k !== "none").map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+      <p class="small">First sample that signals the problem: <b id="selPt">click a point on either chart</b></p></div>
+    <button id="bSub" disabled>Submit</button><div class="err" id="eSub"></div><div id="fb"></div></div>`;
+  const pick = (k) => { sel = k + 1; document.getElementById("selPt").textContent = "#" + sel; paint(); ready(); };
+  const ptColors = (arr) => arr.map((p, k) => k + 1 === sel ? "#f2b632" : "#00533e");
+  const opts = (yTitle) => ({ maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, onClick: (e, els) => { if (els.length && verdict === "out") pick(els[0].index); },
+    scales: { y: { title: { display: true, text: yTitle } } } });
+  cx && cx.destroy(); cr && cr.destroy();
+  cx = new Chart(document.getElementById("cX"), { type: "line", data: { labels, datasets: [
+    { label: "x̄", data: c.pts.map((p) => p.mean), borderColor: "#00533e", pointRadius: 5, pointHoverRadius: 8, pointBackgroundColor: ptColors(c.pts, "mean", L.lcl, L.ucl) },
+    lineDs("UCL", L.ucl, n, "#b23a2b"), lineDs("CL", L.xbb, n, "#5d6762", [2, 2]), lineDs("LCL", L.lcl, n, "#b23a2b")] }, options: opts("x̄ (ml)") });
+  cr = new Chart(document.getElementById("cR"), { type: "line", data: { labels, datasets: [
+    { label: "R", data: c.pts.map((p) => p.range), borderColor: "#3b6fb6", pointRadius: 4, pointBackgroundColor: ptColors(c.pts, "range", -1, L.uclr) },
+    lineDs("UCL", L.uclr, n, "#b23a2b"), lineDs("CL", L.rbar, n, "#5d6762", [2, 2])] }, options: opts("R (ml)") });
+  const paint = () => { cx.data.datasets[0].pointBackgroundColor = ptColors(c.pts, "mean", L.lcl, L.ucl); cr.data.datasets[0].pointBackgroundColor = ptColors(c.pts, "range", -1, L.uclr); cx.update(); cr.update(); };
+  const ready = () => { document.getElementById("bSub").disabled = !(verdict === "in" || (verdict === "out" && document.getElementById("pat").value && sel)); };
+  const setV = (v) => { verdict = v; document.getElementById("vIn").classList.toggle("sel", v === "in"); document.getElementById("vOut").classList.toggle("sel", v === "out");
+    document.getElementById("outBox").classList.toggle("hidden", v !== "out"); if (v === "in") { sel = null; paint(); } ready(); };
+  document.getElementById("vIn").onclick = () => setV("in"); document.getElementById("vOut").onclick = () => setV("out");
+  document.getElementById("pat").onchange = ready;
+  document.getElementById("bSub").onclick = async () => {
+    const ans = { verdict, pattern: verdict === "out" ? document.getElementById("pat").value : "none", point: verdict === "out" ? sel : null };
+    const g = SPC.grade(c, ans), row = { chart: i + 1, type: c.type, signal_at: c.signal ? c.signal.at : null, ...ans, ...g, ms: Math.round(performance.now() - t0) };
+    document.getElementById("bSub").disabled = true;
+    try { await X.log(i + 1, "chart", row); answers.push(row); } catch (e) { document.getElementById("eSub").textContent = e.message; document.getElementById("bSub").disabled = false; return; }
+    X.el.querySelectorAll(".verdict button, select").forEach((b) => b.disabled = true);
+    const truth = c.type === "none" ? "This run was <b>in control</b>: only random (natural) variation." :
+      `This run was <b>out of control</b>: ${SPC.PATTERNS[c.type].toLowerCase()}, first signaled at <b>sample #${c.signal.at}</b>${c.type === "spread" ? " on the R chart" : ""}.`;
+    const msg = g.false_alarm ? "That's a <b>false alarm</b>: you would have stopped a process that was fine." : g.miss ? "That's a <b>miss</b>: the process had a problem." : g.points === 4 ? "Exactly right!" : "Right verdict." + (!g.pattern_ok ? " Check the pattern." : "") + (!g.point_ok ? " Check where it starts." : "");
+    document.getElementById("fb").innerHTML = `<div class="fb ${g.verdict_ok ? "good" : "bad"}">${msg} ${truth} <b>+${g.points}</b> points.</div>
+      <button class="gold" id="bNext" style="margin-top:10px">${i + 1 >= G.charts.length ? "Finish →" : "Next run →"}</button>`;
+    if (c.signal) { sel = c.signal.at; paint(); }
+    document.getElementById("bNext").onclick = () => route();
+  };
+}
+
+// ---------- 3. finish ----------
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>Which kind of problem was hardest to spot, and why?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const lim = X.ev("limits")[0] || {};
+    const s = { score: answers.reduce((t, a) => t + a.points, 0), max: answers.length * 4, n: answers.length, verdicts: answers.filter((a) => a.verdict_ok).length,
+      false_alarms: answers.filter((a) => a.false_alarm).length, misses: answers.filter((a) => a.miss).length,
+      limits_first_try: ["ucl", "lcl", "uclr"].filter((k) => lim[k + "_tries"] === 1 && lim[k + "_ok"]).length };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>

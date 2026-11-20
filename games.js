@@ -5,7 +5,7 @@ window.POM_CATALOG = [
     blurb: "Staff and equip a bakery, then calculate labor and multifactor productivity. Hidden twist: what you are paid on changes what you do." },
   { key: "quality", prefix: "QUAL",      chapter: "Ch. 6",  topic: "Managing Quality",            title: "Cost of Quality",               week: 1, status: "live",
     blurb: "Spend on prevention and appraisal, or pay for internal and external failures." },
-  { key: "spc", prefix: "SPC",          chapter: "S6",     topic: "Statistical Process Control",  title: "Control Chart Detective",       week: 1, status: "soon",
+  { key: "spc", prefix: "SPC",          chapter: "S6",     topic: "Statistical Process Control",  title: "Control Chart Detective",       week: 1, status: "live",
     blurb: "Watch a process run and call it in or out of control. Be quick, but avoid false alarms." },
   { key: "project", prefix: "PROJ",      chapter: "Ch. 3",  topic: "Project Management",           title: "Crash the Project",             week: 2, status: "soon",
     blurb: "Meet the deadline at the lowest cost by crashing the right activities on the critical path." },
