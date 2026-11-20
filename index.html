@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <script>/* auto-refresh when a newer version is published */
-(function(){var V="4";fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+(function(){var V="5";fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>POM Games — BUS361 Production &amp; Operations Management</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,7 +43,7 @@
 <footer>Your instructor sees the nickname you choose and, if you enter it, your student ID. Session codes are given in class.</footer>
 <script>
 const cat = window.POM_CATALOG;
-const prefixes = { BAKE: "productivity" };   // code prefix → game, for the quick-join box
+const prefixes = Object.fromEntries(cat.filter(g => g.status === "live" && g.prefix).map(g => [g.prefix, g.key]));   // code prefix → game
 document.getElementById("weeks").innerHTML = [1, 2, 3, 4, 5].map(w => `<div class="wk"><h2>Week ${w}</h2><div class="tiles">` +
   cat.filter(g => g.week === w).map(g => g.status === "live"
     ? `<a class="tile" href="games/${g.key}/"><span class="ch">${g.chapter} · ${g.topic}</span><h3>${g.title}</h3><p>${g.blurb}</p><span class="st ok">▶ Play</span></a>`

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="5";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost of Quality — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=5">
+<script src="../../vendor/supabase.js?v=5"></script>
+<script src="../../vendor/chart.umd.min.js?v=5"></script>
+<script src="../../config.js?v=5"></script>
+<script src="../../pom.js?v=5"></script>
+<script src="../../pom-game.js?v=5"></script>
+<script src="model.js?v=5"></script>
+<style>
+  .cls{display:grid;grid-template-columns:1fr 190px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)}
+  .cls.good select{border-color:var(--good);background:#eef8f1}.cls.bad select{border-color:var(--bad);background:#fbeceb}
+  input[type=range]{padding:0}
+  .bar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:6px 0}
+  .bar div{height:100%}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const P0 = QUAL.DEFAULTS, M = (x, d) => POM.money(x, d || 0);
+const COL = { prevention: "#00533e", appraisal: "#3b6fb6", internal: "#d08a00", external: "#b23a2b" };
+let X, rows, chart;
+
+POMGame.start({
+  game: "quality", chapter: "Ch. 6", topic: "Managing Quality", icon: "🔍", title: "Cost of Quality",
+  tagline: "Run the quality program of an electronics assembly plant. Spend on prevention and inspection, or pay for defects later.",
+  defaults: P0,
+  bots: () => ["SixSigmaSue", "DemingFan", "JuranJr", "KaizenKid"].map((n, i) => ({ nickname: n, summary: { score: 330000 + i * 30000, avg_pct: .08 + i * .01 } })),
+  board: { label: "Total cost of quality", lowerBetter: true, fmt: (v) => M(v), cols: [["COQ % of sales", (s) => (s.avg_pct * 100).toFixed(1) + "%"]] },
+  run(ctx) { X = ctx; rows = ctx.ev("month"); route(); },
+  results: (s) => UI.kpis([["Total cost of quality", M(s.score)], ["Avg COQ as % of sales", (s.avg_pct * 100).toFixed(1) + "%"],
+    ["Defect rate: month 1 → last", (s.rate_first * 100).toFixed(1) + "% → " + (s.rate_last * 100).toFixed(1) + "%"], ["Defects that reached customers", POM.fmt(s.escaped)]]) +
+    `<div class="goal small">Lower is better. Compare: inspecting every unit with no prevention cost <b>${M(s.bench_inspect)}</b>, and the best simple plan cost <b>${M(s.bench_best)}</b>. ` +
+    `Deming's point: you can't inspect quality in; you have to build it in. Prevention takes time to pay off, so inspection buys time while prevention catches up.</div>`
+});
+
+function route() {
+  if (!X.ev("classify").length) return classify();
+  const last = rows[rows.length - 1];
+  if (last && needQuiz(last) && !last.quiz_done) return result(last);
+  if (rows.length >= X.P.months) return reflect();
+  decide();
+}
+const needQuiz = (r) => r.month <= X.P.quiz_months;
+
+// ---------- 1. classification warm-up ----------
+function classify() {
+  const items = QUAL.ITEMS.map((it, i) => ({ ...it, i })).sort((a, b) => (a.i * 7919 % 11) - (b.i * 7919 % 11));
+  X.el.innerHTML = `<div class="card"><h2>Warm-up: the four costs of quality</h2>
+    <p class="small muted">Put each cost in its category (Heizer Ch. 6). You get one check, then the answers are shown.</p>
+    ${items.map((it) => `<div class="cls" id="c${it.i}"><span>${it.t}</span><select data-i="${it.i}"><option value="">Choose…</option>${Object.entries(QUAL.CATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>`).join("")}
+    <button id="bCls" style="margin-top:12px">Check</button> <span class="err" id="eCls"></span>
+    <div id="clsNext" class="hidden" style="margin-top:12px"></div></div>`;
+  document.getElementById("bCls").onclick = async () => {
+    const sel = [...X.el.querySelectorAll("select")];
+    if (sel.some((s) => !s.value)) { document.getElementById("eCls").textContent = "Please classify every item."; return; }
+    const ans = {}; let ok = 0;
+    sel.forEach((s) => { const it = QUAL.ITEMS[+s.dataset.i], good = s.value === it.c; ok += good; ans[s.dataset.i] = s.value;
+      const row = document.getElementById("c" + s.dataset.i); row.classList.add(good ? "good" : "bad"); s.disabled = true;
+      if (!good) row.querySelector("span").innerHTML += ` <b class="small" style="color:var(--bad)">→ ${QUAL.CATS[it.c]}</b>`; });
+    document.getElementById("bCls").disabled = true;
+    try { await X.log(0, "classify", { correct: ok, n: sel.length, answers: ans }); } catch (e) { document.getElementById("eCls").textContent = e.message; return; }
+    const nx = document.getElementById("clsNext"); nx.classList.remove("hidden");
+    nx.innerHTML = `<div class="goal">You got <b>${ok} of ${sel.length}</b> right. Prevention and appraisal are costs you choose to spend. Internal and external failures are what you pay when you don't.</div>
+      <button class="gold" id="bGo" style="margin-top:10px">Start running the plant →</button>`;
+    document.getElementById("bGo").onclick = brief;
+  };
+}
+function brief() {
+  const P = X.P;
+  X.el.innerHTML = `<div class="card"><h2>Eagle Electronics: your quality program</h2>
+    <p>The plant assembles <b>${POM.fmt(P.units)} units a month</b> (selling price ${M(P.price)}). Right now about <b>${(P.d0 * 100).toFixed(0)}%</b> of units are defective. You run quality for <b>${P.months} months</b>. Your goal is the <b>lowest total cost of quality</b>.</p>
+    ${UI.table(["Cost", "What it is", "Cost"], [
+      ["Prevention", "Training, supplier programs, design reviews. It lowers the defect rate, but only gradually, and the effect carries over to later months.", `you choose: $0–${M(P.max_prev)}/month`],
+      ["Appraisal", `Inspecting finished units. Inspection catches ${Math.round(P.inspect_eff * 100)}% of the defects in the units it checks.`, `${M(P.inspect_cost, 2)} per unit inspected`],
+      ["Internal failure", "Rework or scrap for each defect caught before it ships", `${M(P.internal)} per defect`],
+      ["External failure", "Warranty, returns and lost customers for each defect that ships", `${M(P.external)} per defect`]])}
+    <button class="gold" id="bStart" style="margin-top:12px">Go to month 1 →</button></div>`;
+  document.getElementById("bStart").onclick = decide;
+}
+
+// ---------- 2. monthly decision ----------
+function decide() {
+  const P = X.P, m = rows.length + 1, prev = rows[rows.length - 1] || { prevention: 0, inspect: 0 };
+  X.el.innerHTML = `<div class="grid2"><div class="card">
+    <h2>Month ${m} of ${P.months}</h2>
+    <label>Prevention spending this month: <b id="vPrev"></b></label><input type="range" id="sPrev" min="0" max="${P.max_prev}" step="1000" value="${prev.prevention}">
+    <label>Share of units inspected: <b id="vIns"></b></label><input type="range" id="sIns" min="0" max="100" step="25" value="${Math.round(prev.inspect * 100)}">
+    <p class="small muted" id="vInfo"></p>
+    <button id="bRun" class="full">Run month ${m}</button><div class="err" id="eRun"></div></div>
+    <div class="card"><h3>So far</h3>${history()}</div></div>`;
+  const upd = () => { const p = +sPrev.value, i = +sIns.value / 100;
+    vPrev.textContent = M(p); vIns.textContent = Math.round(i * 100) + "%";
+    vInfo.textContent = `Planned spending you control: ${M(p + Math.round(P.units * i * P.inspect_cost))} (prevention + inspection). Failure costs depend on how many defects you get.`; };
+  const sPrev = document.getElementById("sPrev"), sIns = document.getElementById("sIns"), vPrev = document.getElementById("vPrev"), vIns = document.getElementById("vIns"), vInfo = document.getElementById("vInfo");
+  sPrev.oninput = sIns.oninput = upd; upd(); drawChart();
+  const t0 = performance.now();
+  document.getElementById("bRun").onclick = async () => {
+    const Qprev = rows.length ? rows[rows.length - 1].Q : 0, sh = QUAL.shocks(P)[m];
+    const r = { month: m, ...QUAL.month(P, { prevention: +sPrev.value, inspect: +sIns.value / 100 }, Qprev, sh), ms: Math.round(performance.now() - t0) };
+    r.quiz_done = !needQuiz(r);
+    document.getElementById("bRun").disabled = true;
+    try { await X.log(m, "month", r); rows.push(r); result(r); }
+    catch (e) { document.getElementById("eRun").textContent = e.message; document.getElementById("bRun").disabled = false; }
+  };
+}
+
+// ---------- 3. results (+ calculation check in early months) ----------
+function costTable(r) {
+  const c = r.cost;
+  return UI.table(["Category", "Calculation", "Cost"], [
+    ["Prevention", "your choice", M(c.prevention)],
+    ["Appraisal", `${POM.fmt(X.P.units * r.inspect)} units × ${M(X.P.inspect_cost, 2)}`, M(c.appraisal)],
+    ["Internal failure", `${POM.fmt(r.caught)} caught × ${M(X.P.internal)}`, M(c.internal)],
+    ["External failure", `${POM.fmt(r.escaped)} shipped × ${M(X.P.external)}`, M(c.external)],
+    ["<b>Total cost of quality</b>", "", r.quiz_done ? `<b>${M(c.total)}</b>` : "?"]]);
+}
+function result(r) {
+  const P = X.P;
+  X.el.innerHTML = `<div class="grid2"><div class="card"><h2>Month ${r.month} results</h2>
+    <p>Defect rate <b>${(r.rate * 100).toFixed(2)}%</b> → <b>${POM.fmt(r.defects)}</b> defective units. Inspection caught <b>${POM.fmt(r.caught)}</b>; <b>${POM.fmt(r.escaped)}</b> reached customers.</p>
+    ${costTable(r)}<div id="quiz" style="margin-top:12px"></div><div id="after"></div></div>
+    <div class="card"><h3>So far</h3>${history()}</div></div>`;
+  drawChart();
+  const after = () => {
+    document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">Total cost of quality = ${M(r.coq)}, which is <b>${(r.pct_sales * 100).toFixed(1)}% of sales</b> (${M(P.units * P.price)}).</div>
+      <button class="gold full" id="bNext" style="margin-top:10px">${r.month >= P.months ? "Finish →" : "Next month →"}</button>`;
+    document.getElementById("bNext").onclick = () => r.month >= P.months ? reflect() : decide();
+  };
+  if (r.quiz_done) return after();
+  document.getElementById("quiz").innerHTML = `<p class="small"><b>Your turn:</b> add up this month's costs.</p><div id="qq"></div>`;
+  UI.quiz(document.getElementById("qq"), [
+    { key: "total", label: "Total cost of quality ($)", truth: r.coq, dec: 0, tol: 0.001 },
+    { key: "pct", label: "COQ as % of sales (e.g. 12.5)", truth: r.pct_sales * 100, dec: 1, tol: 0.01 }], async (st) => {
+      Object.assign(r, { quiz_done: true, total_tries: st.total.tries, total_ok: st.total.ok, pct_tries: st.pct.tries, pct_ok: st.pct.ok });
+      try { await X.log(r.month, "month", r); } catch (e) {}
+      document.querySelector("#gMain table tr:last-child td:last-child").innerHTML = `<b>${M(r.coq)}</b>`; drawChart(); after();
+    });
+}
+function history() {
+  return `<div style="height:220px"><canvas id="cHist"></canvas></div>` + (rows.length ? UI.table(["Mo", "Prev.", "Insp.", "Defect %", "COQ"],
+    rows.map((r) => [r.month, M(r.prevention), Math.round(r.inspect * 100) + "%", (r.rate * 100).toFixed(1) + "%", r.quiz_done ? M(r.coq) : "?"])) : `<p class="small muted">No months yet.</p>`);
+}
+function drawChart() {
+  const el = document.getElementById("cHist"); if (!el) return;
+  const done = rows.filter((r) => r.quiz_done);
+  if (chart) chart.destroy();
+  chart = new Chart(el, { type: "bar", data: { labels: done.map((r) => "M" + r.month),
+    datasets: Object.keys(COL).map((k) => ({ label: QUAL.CATS[k], data: done.map((r) => r.cost[k]), backgroundColor: COL[k], stack: "c" })) },
+    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } }, scales: { y: { ticks: { callback: (v) => "$" + v / 1000 + "k" } } } } });
+}
+
+// ---------- 4. reflection & finish ----------
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>In one or two sentences: <b>how did you split your money between prevention and inspection over time, and why?</b></p>
+    <textarea id="refl" rows="4" maxlength="1500"></textarea><button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const P = X.P, b = QUAL.benchmarks(P), bv = Object.values(b);
+    const s = { score: rows.reduce((t, r) => t + r.coq, 0), avg_pct: rows.reduce((t, r) => t + r.pct_sales, 0) / rows.length,
+      rate_first: rows[0].rate, rate_last: rows[rows.length - 1].rate, escaped: rows.reduce((t, r) => t + r.escaped, 0),
+      total_prev: rows.reduce((t, r) => t + r.prevention, 0), avg_inspect: rows.reduce((t, r) => t + r.inspect, 0) / rows.length,
+      classify: (X.ev("classify")[0] || {}).correct, bench_inspect: bv[0], bench_best: bv[2] };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>
