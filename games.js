@@ -7,7 +7,7 @@ window.POM_CATALOG = [
     blurb: "Spend on prevention and appraisal, or pay for internal and external failures." },
   { key: "spc", prefix: "SPC",          chapter: "S6",     topic: "Statistical Process Control",  title: "Control Chart Detective",       week: 1, status: "live",
     blurb: "Watch a process run and call it in or out of control. Be quick, but avoid false alarms." },
-  { key: "project", prefix: "PROJ",      chapter: "Ch. 3",  topic: "Project Management",           title: "Crash the Project",             week: 2, status: "soon",
+  { key: "project", prefix: "PROJ",      chapter: "Ch. 3",  topic: "Project Management",           title: "Crash the Project",             week: 2, status: "live",
     blurb: "Meet the deadline at the lowest cost by crashing the right activities on the critical path." },
   { key: "forecasting", prefix: "FCST",  chapter: "Ch. 4",  topic: "Forecasting",                  title: "Forecasting Contest",           week: 2, status: "soon",
     blurb: "Forecast next period's demand and compete with moving averages and exponential smoothing on MAD."},

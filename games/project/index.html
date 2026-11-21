@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="7";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash the Project — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=7">
+<script src="../../vendor/supabase.js?v=7"></script>
+<script src="../../vendor/chart.umd.min.js?v=7"></script>
+<script src="../../config.js?v=7"></script>
+<script src="../../pom.js?v=7"></script>
+<script src="../../pom-game.js?v=7"></script>
+<script src="model.js?v=7"></script>
+<style>
+  .crit td{background:#fbeceb}
+  .step{display:inline-flex;align-items:center;gap:4px}
+  .step button{padding:2px 9px;font-size:15px}
+  .step b{min-width:18px;text-align:center;display:inline-block}
+  .net svg{width:100%;height:auto}
+  .chk{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
+  .chk label{display:flex;gap:4px;align-items:center;margin:0;font-size:14px;color:var(--ink);font-weight:600}
+  .chk input{width:auto}
+  #tbl td,#tbl th{font-size:13px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, x = {}, tries = [], t0;
+const A = PROJ.ACTS, M = (v) => POM.money(v);
+
+POMGame.start({
+  game: "project", chapter: "Ch. 3", topic: "Project Management", icon: "🏗️", title: "Crash the Project",
+  tagline: "Launch the campus app as cheaply as possible. Find the critical path, then decide which activities to crash.",
+  defaults: PROJ.DEFAULTS,
+  bots: () => ["GanttGuru", "PERTy", "SlackJack", "CrashCourse"].map((n, i) => ({ nickname: n, summary: { score: 30800 + i * 2200, weeks: 15 + (i % 2) } })),
+  board: { label: "Total project cost", lowerBetter: true, fmt: (v) => M(v), cols: [["Weeks", (s) => s.weeks]] },
+  run(ctx) { X = ctx; route(); },
+  results: (s) => UI.kpis([["Your total cost", M(s.score)], ["Your duration", s.weeks + " weeks"], ["Best possible", M(s.opt_total) + " · " + s.opt_weeks + " wks"], ["Wasted on non-critical activities", M(s.wasted)]]) +
+    `<div class="goal small">${s.score <= s.opt_total ? "🏆 You found the cheapest plan!" : `You were ${M(s.score - s.opt_total)} above the best plan.`} The best plan crashes these activities: <b>${Object.entries(s.opt_x).filter(([, w]) => w).map(([id, w]) => `${id} by ${w}`).join(", ")}</b>. ` +
+    `The rule is to crash the cheapest activity on the critical path, one week at a time, as long as that week costs less than the indirect cost and penalty it saves. When there are several critical paths, you have to shorten all of them.</div>`
+});
+
+function route() {
+  if (X.P.quiz && !X.ev("cpm").length) return quiz();
+  if (!X.ev("plan").length) return plan();
+  reflect();
+}
+
+// ---------- network picture (activity-on-node) ----------
+function network(r) {
+  const col = { A: 0, B: 0, C: 1, D: 1, E: 1, F: 2, I: 2, G: 3, H: 4, J: 5 }, row = { A: 0, B: 2, C: 0, D: 1, E: 2, F: 0, I: -1, G: 1, H: 1, J: 0 };
+  const px = (id) => 40 + col[id] * 125, py = (id) => 70 + row[id] * 62, W = 60, H = 40;
+  let s = `<svg viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5d6762"/></marker></defs>`;
+  A.forEach((a) => a.pre.forEach((p) => { const c = r && r.slack[a.id] === 0 && r.slack[p] === 0 && r.ef[p] === r.es[a.id];
+    s += `<line x1="${px(p) + W}" y1="${py(p) + H / 2}" x2="${px(a.id) - 2}" y2="${py(a.id) + H / 2}" stroke="${c ? "#b23a2b" : "#9aa39e"}" stroke-width="${c ? 2.5 : 1.5}" marker-end="url(#ar)"/>`; }));
+  A.forEach((a) => { const c = r && r.slack[a.id] === 0, d = r ? r.d[a.id] : a.t;
+    s += `<rect x="${px(a.id)}" y="${py(a.id)}" width="${W}" height="${H}" rx="8" fill="${c ? "#fbeceb" : "#fff"}" stroke="${c ? "#b23a2b" : "#00533e"}" stroke-width="2"/>
+      <text x="${px(a.id) + W / 2}" y="${py(a.id) + 17}" text-anchor="middle" font-weight="700" font-size="14" fill="#18201d">${a.id}</text>
+      <text x="${px(a.id) + W / 2}" y="${py(a.id) + 33}" text-anchor="middle" font-size="12" fill="#5d6762">${d} wk</text>`; });
+  return `<div class="net">${s}</svg></div>`;
+}
+function actTable(r, editable) {
+  return `<div class="scroll"><table id="tbl"><tr><th>Act.</th><th style="text-align:left">Description</th><th>Before</th><th>Normal wks</th><th>Min wks</th><th>Crash $/wk</th>${editable ? "<th>Crash by</th><th>Weeks</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Slack</th>" : ""}</tr>` +
+    A.map((a) => `<tr class="${editable && r.slack[a.id] === 0 ? "crit" : ""}"><td><b>${a.id}</b></td><td style="text-align:left">${a.name}</td><td>${a.pre.join(", ") || "–"}</td><td>${a.t}</td><td>${a.min}</td><td>${a.t > a.min ? M(a.c) : "–"}</td>` +
+      (editable ? `<td>${a.t > a.min ? `<span class="step"><button class="ghost" data-a="${a.id}" data-s="-1">−</button><b>${x[a.id] || 0}</b><button class="ghost" data-a="${a.id}" data-s="1">+</button></span>` : "–"}</td><td><b>${r.d[a.id]}</b></td><td>${r.es[a.id]}</td><td>${r.ef[a.id]}</td><td>${r.ls[a.id]}</td><td>${r.lf[a.id]}</td><td>${r.slack[a.id]}</td>` : "") + `</tr>`).join("") + `</table></div>`;
+}
+
+// ---------- 1. find the critical path ----------
+function quiz() {
+  X.el.innerHTML = `<div class="card"><h2>Launching the campus app</h2>
+    <p>You manage the launch of the new campus app. The activities, how long each normally takes, and what must finish first:</p>
+    ${actTable(null, false)}${network(null)}
+    <h3 style="margin-top:12px">Step 1: analyze the project without crashing</h3><div id="qq"></div>
+    <label>Which activities are on the critical path? (tick all)</label><div class="chk">${A.map((a) => `<label><input type="checkbox" value="${a.id}">${a.id}</label>`).join("")}</div>
+    <div id="after"></div></div>`;
+  const r = PROJ.cpm({});
+  UI.quiz(document.getElementById("qq"), [{ key: "T", label: "Project duration with normal times (weeks)", truth: r.T, dec: 0, tol: 0 },
+    { key: "slackD", label: "Slack of activity D (weeks)", truth: r.slack.D, dec: 0, tol: 0 }], async (st) => {
+      const picked = [...X.el.querySelectorAll(".chk input:checked")].map((c) => c.value).sort().join("");
+      const ok = picked === r.critical.join("");
+      X.el.querySelectorAll(".chk input").forEach((c) => c.disabled = true);
+      try { await X.log(0, "cpm", { T_tries: st.T.tries, T_ok: st.T.ok, T_answers: st.T.answers, slack_tries: st.slackD.tries, slack_ok: st.slackD.ok, critical: picked, critical_ok: ok }); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">${ok ? "✔ Critical path correct." : "✘ Not quite."} The critical path is <b>${r.critical.join("–")}</b> (${r.T} weeks). Every activity on it has zero slack.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Now crash the project →</button>`;
+      document.getElementById("bGo").onclick = plan;
+    });
+}
+
+// ---------- 2. crash planning ----------
+function plan() {
+  t0 = t0 || performance.now();
+  const P = X.P, c = PROJ.cost(P, x), r = c.cpm, ps = PROJ.paths();
+  const len = (p) => p.reduce((s, id) => s + r.d[id], 0);
+  X.el.innerHTML = `<div class="card"><h2>Step 2: crash the project</h2>
+    <p class="small">The university wants the app live in <b>${P.deadline} weeks</b>. Every week the project runs costs <b>${M(P.indirect)}</b> in indirect costs (team, rented space). Each week past the deadline adds a <b>${M(P.penalty)}</b> penalty.
+    Use + and − to crash activities. Your goal is the <b>lowest total cost</b>. Critical activities are shaded red.</p>
+    ${UI.kpis([["Duration", c.T + " weeks"], ["Crashing cost", M(c.crash)], ["Indirect cost", M(c.indirect)], ["Late penalty", M(c.penalty)], ["Total cost", M(c.total)]])}
+    <div class="grid2"><div>${network(r)}</div><div><h3>Paths</h3>${UI.table(["Path", "Length"], ps.map((p) => [p.join("–"), `<b style="color:${len(p) === r.T ? "var(--bad)" : "inherit"}">${len(p)}</b>`]))}</div></div>
+    ${actTable(r, true)}
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" id="bReset">Reset to normal</button><button class="gold" id="bSub">Submit this plan</button></div>
+    <div class="err" id="eSub"></div></div>`;
+  X.el.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => {
+    const a = A.find((q) => q.id === b.dataset.a), v = Math.max(0, Math.min(a.t - a.min, (x[a.id] || 0) + +b.dataset.s));
+    x[a.id] = v; tries.push(a.id + (+b.dataset.s > 0 ? "+" : "-")); plan();
+  });
+  document.getElementById("bReset").onclick = () => { x = {}; tries.push("reset"); plan(); };
+  document.getElementById("bSub").onclick = async () => {
+    const o = PROJ.optimum(P), cc = PROJ.cost(P, x);
+    const row = { x: { ...x }, weeks: cc.T, crash: cc.crash, indirect: cc.indirect, penalty: cc.penalty, total: cc.total, opt_total: o.total, opt_weeks: o.T,
+      gap: cc.total - o.total, wasted: PROJ.wasted(x), clicks: tries.length, moves: tries.slice(0, 120).join(" "), ms: Math.round(performance.now() - t0) };
+    document.getElementById("bSub").disabled = true;
+    try { await X.log(1, "plan", row); reflect(); } catch (e) { document.getElementById("eSub").textContent = e.message; document.getElementById("bSub").disabled = false; }
+  };
+}
+
+// ---------- 3. finish ----------
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>How did you decide which activities to crash, and when to stop?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const p = X.ev("plan")[0], o = PROJ.optimum(X.P), q = X.ev("cpm")[0] || {};
+    const s = { score: p.total, weeks: p.weeks, wasted: p.wasted, opt_total: o.total, opt_weeks: o.T, opt_x: o.x, gap: p.total - o.total, critical_ok: q.critical_ok };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>
