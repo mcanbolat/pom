@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="12";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff the Checkout — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=12">
+<script src="../../vendor/supabase.js?v=12"></script>
+<script src="../../vendor/chart.umd.min.js?v=12"></script>
+<script src="../../config.js?v=12"></script>
+<script src="../../pom.js?v=12"></script>
+<script src="../../pom-game.js?v=12"></script>
+<script src="model.js?v=12"></script>
+<style>
+  .people{font-size:22px;letter-spacing:2px;min-height:34px;word-break:break-all}
+  .srv{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.srv button{min-width:44px}.srv button.sel{outline:3px solid var(--gold)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, rows, t0;
+const M = (v, d) => v == null ? "∞" : POM.money(v, d == null ? 2 : d), mins = (h) => h == null ? "∞" : (h * 60).toFixed(1) + " min";
+const hourLabel = (k) => { const h = X.P.start_hour + k; return `${((h + 11) % 12) + 1}:00 ${h < 12 ? "am" : "pm"}`; };
+
+POMGame.start({
+  game: "queues", chapter: "Mod. D", topic: "Waiting Line Analysis", icon: "🛒", title: "Staff the Checkout",
+  tagline: "Decide how many cashiers to schedule each hour at the campus bookstore. Every cashier costs money, and so does every minute a customer spends waiting in line.",
+  defaults: QUEUE.DEFAULTS,
+  bots: () => ["LittlesLaw", "QueueQueen", "ErlangEd", "PoissonPat"].map((n, i) => ({ nickname: n, summary: { score: 525 + i * 30, avg_rho: .6 + i * .03 } })),
+  board: { label: "Total cost for the day", lowerBetter: true, fmt: (v) => M(v), cols: [["Avg utilization", (s) => Math.round(s.avg_rho * 100) + "%"]] },
+  run(ctx) { X = ctx; rows = ctx.ev("hour"); route(); },
+  results: (s) => UI.kpis([["Your total cost", M(s.score)], ["Lowest possible", M(s.best)], ["Hours staffed optimally", `${s.optimal_hours} / ${s.hours}`], ["Your average utilization", Math.round(s.avg_rho * 100) + "%"], ["Average wait in line", mins(s.avg_wq)]]) +
+    `<div class="goal small">The best staffing balances the <b>cost of service</b> (cashier wages) against the <b>cost of waiting</b> (customers' time in line). Running cashiers near 100% busy looks efficient, but the line grows very fast as utilization approaches 100%. Notice that the best utilization was <b>not</b> the same every hour. With more customers and more cashiers, you can run busier without long lines, because several cashiers serving one line pool their capacity.</div>`
+});
+
+function route() {
+  if (X.P.quiz && !X.ev("quiz").length) return quiz();
+  if (rows.length >= X.P.rates.length) return reflect();
+  hour();
+}
+function quiz() {
+  const P = X.P, l = P.rates[0], q = QUEUE.mms(l, P.mu, 1);
+  X.el.innerHTML = `<div class="card"><h2>The bookstore checkout</h2>
+    <p>Customers arrive at random (Poisson) and each cashier serves on average <b>μ = ${P.mu} customers an hour</b> (exponential service times). Everyone waits in <b>one line</b> for the next free cashier. A cashier costs <b>${M(P.wage, 0)}/hour</b>. Management values a customer's time in line at <b>${M(P.wait_cost, 0)}/hour</b>.</p>
+    <h3>Warm-up: at ${hourLabel(0)}, λ = ${l} customers/hour and there is 1 cashier (M/M/1)</h3>
+    <p class="small"><span class="formula">ρ = λ ÷ μ</span> <span class="formula">Lq = λ² ÷ [μ(μ − λ)]</span> <span class="formula">Wq = λ ÷ [μ(μ − λ)]</span> (hours; × 60 for minutes)</p>
+    <div id="qq"></div><div id="after"></div></div>`;
+  UI.quiz(document.getElementById("qq"), [{ key: "rho", label: "Utilization ρ (e.g. 0.75)", truth: q.rho, dec: 3, tol: 0.005 },
+    { key: "lq", label: "Lq: average number waiting in line (2 decimals)", truth: q.Lq, dec: 2, tol: 0.005 },
+    { key: "wq", label: "Wq: average wait in line (minutes, 1 decimal)", truth: q.Wq * 60, dec: 1, tol: 0.01 }], async (st) => {
+      try { await X.log(0, "quiz", Object.fromEntries(Object.entries(st).flatMap(([k, v]) => [[k + "_tries", v.tries], [k + "_ok", v.ok], [k + "_answers", v.answers]]))); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">ρ = ${l}/${P.mu} = ${q.rho.toFixed(3)}; Lq = ${l}² ÷ (${P.mu} × ${P.mu - l}) = ${q.Lq.toFixed(2)} customers; Wq = ${(q.Wq * 60).toFixed(1)} minutes.
+        Now schedule the whole day. For several cashiers (M/M/s) the formulas are longer, so the game calculates them for you once you decide.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Schedule the day →</button>`;
+      document.getElementById("bGo").onclick = hour;
+    });
+}
+function hour() {
+  const P = X.P, k = rows.length, l = P.rates[k]; let s = null; t0 = performance.now();
+  X.el.innerHTML = `<div class="grid2"><div class="card"><h2>${hourLabel(k)} – ${hourLabel(k + 1)}</h2>
+    <p>Forecast: <b>λ = ${l} customers an hour</b> (each cashier serves μ = ${P.mu}/hour).</p>
+    <div class="people">${"🧍".repeat(Math.min(30, Math.round(l / 4)))}</div>
+    <label>How many cashiers?</label><div class="srv">${Array.from({ length: P.max_s }, (_, i) => `<button class="ghost" data-s="${i + 1}">${i + 1}</button>`).join("")}</div>
+    <div id="pv" class="small muted">Pick a number to see the expected cost of service. The waiting results appear after the hour.</div>
+    <button id="bH" class="full" disabled style="margin-top:10px">Open the registers</button><div class="err" id="eH"></div></div>
+    <div class="card"><h3>Your day so far</h3>${rows.length ? UI.table(["Hour", "Arrivals/hr", "Cashiers", "Utilization", "Wait in line", "Cost"], rows.map((r) => [hourLabel(r.hour - 1), r.lambda, r.s, Math.round(r.rho * 100) + "%", mins(r.Wq), M(r.total)])) +
+      `<p><b>Total so far: ${M(rows.reduce((t, r) => t + r.total, 0))}</b></p>` : `<p class="small muted">No hours yet.</p>`}<div style="height:200px"><canvas id="cQ"></canvas></div></div></div>`;
+  if (rows.length) new Chart(document.getElementById("cQ"), { type: "bar", data: { labels: rows.map((r) => hourLabel(r.hour - 1)), datasets: [
+    { label: "Cashier wages", data: rows.map((r) => r.service), backgroundColor: "#00533e", stack: "c" }, { label: "Waiting cost", data: rows.map((r) => r.waiting), backgroundColor: "#d08a00", stack: "c" }] },
+    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } } } });
+  X.el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => {
+    s = +b.dataset.s; X.el.querySelectorAll("[data-s]").forEach((x) => x.classList.toggle("sel", x === b));
+    const rho = l / (s * P.mu), ok = rho < 1;
+    document.getElementById("pv").innerHTML = ok ? `Utilization ρ = λ ÷ (s·μ) = ${l} ÷ ${s * P.mu} = <b>${Math.round(rho * 100)}%</b>. Wages: ${M(s * P.wage, 0)}.`
+      : `<b style="color:var(--bad)">ρ = ${(rho * 100).toFixed(0)}% ≥ 100%: customers arrive faster than ${s} cashier${s > 1 ? "s" : ""} can serve them, so the line would grow without limit. Add cashiers.</b>`;
+    document.getElementById("bH").disabled = !ok;
+  });
+  document.getElementById("bH").onclick = async () => {
+    const c = QUEUE.hourCost(P, l, s), b = QUEUE.best(P, l);
+    const row = { hour: k + 1, lambda: l, s, rho: c.rho, Lq: c.Lq, L: c.L, Wq: c.Wq, W: c.W, Pwait: c.Pwait, service: c.service, waiting: c.waiting, total: c.total, best_s: b.s, best_total: b.total, ms: Math.round(performance.now() - t0) };
+    document.getElementById("bH").disabled = true;
+    try { await X.log(k + 1, "hour", row); rows.push(row); } catch (e) { document.getElementById("eH").textContent = e.message; document.getElementById("bH").disabled = false; return; }
+    X.el.innerHTML = `<div class="card"><h2>${hourLabel(k)}: results with ${s} cashier${s > 1 ? "s" : ""}</h2>
+      ${UI.kpis([["Utilization", Math.round(c.rho * 100) + "%"], ["Avg. number in line (Lq)", c.Lq.toFixed(2)], ["Avg. wait in line (Wq)", mins(c.Wq)], ["Chance a customer waits", Math.round(c.Pwait * 100) + "%"], ["Cost this hour", M(c.total)]])}
+      ${UI.table(["Cashiers", "Utilization", "Wait in line", "Wages", "Waiting cost", "Total"], Array.from({ length: P.max_s }, (_, i) => QUEUE.hourCost(P, l, i + 1)).filter((h) => h.stable).slice(0, 4).map((h) =>
+        [h.s === s ? `<b>${h.s} (you)</b>` : h.s, Math.round(h.rho * 100) + "%", mins(h.Wq), M(h.service), M(h.waiting), h.s === b.s ? `<b>${M(h.total)} ✔ best</b>` : M(h.total)]))}
+      <div class="goal small" style="margin-top:10px">${s === b.s ? "🏆 Optimal staffing for this hour." : `The cheapest choice was ${b.s} cashier${b.s > 1 ? "s" : ""}: you spent ${M(c.total - b.total)} more.`} Waiting cost = Lq × ${M(P.wait_cost, 0)}/hour.</div>
+      <button class="gold" id="bN" style="margin-top:10px">${k + 1 >= P.rates.length ? "Finish →" : "Next hour →"}</button></div>`;
+    document.getElementById("bN").onclick = route;
+  };
+}
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>How did you decide how many cashiers to schedule? Did you aim for a certain utilization?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const n = rows.length, s = { score: +rows.reduce((t, r) => t + r.total, 0).toFixed(2), best: +rows.reduce((t, r) => t + r.best_total, 0).toFixed(2), hours: n,
+      optimal_hours: rows.filter((r) => r.s === r.best_s).length, over: rows.filter((r) => r.s > r.best_s).length, under: rows.filter((r) => r.s < r.best_s).length,
+      avg_rho: rows.reduce((t, r) => t + r.rho, 0) / n, avg_wq: rows.reduce((t, r) => t + r.Wq, 0) / n };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>

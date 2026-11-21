@@ -17,7 +17,7 @@ window.POM_CATALOG = [
     blurb: "Assign tasks to workstations, respecting precedence and cycle time, and reach high efficiency." },
   { key: "inventory", prefix: "INV",    chapter: "Ch. 12", topic: "Inventory Management",         title: "Order Up! (EOQ & ROP)",         week: 4, status: "live",
     blurb: "Run a stockroom: choose when and how much to order, balancing holding, ordering, and stockout costs." },
-  { key: "queues", prefix: "QUEUE",       chapter: "Mod. D", topic: "Waiting Line Analysis",        title: "Staff the Checkout",            week: 4, status: "soon",
+  { key: "queues", prefix: "QUEUE",       chapter: "Mod. D", topic: "Waiting Line Analysis",        title: "Staff the Checkout",            week: 4, status: "live",
     blurb: "Choose the number of servers and trade off the cost of waiting against the cost of service." },
   { key: "lp", prefix: "MIX",           chapter: "Mod. B", topic: "Linear Programming",           title: "Product Mix Puzzle",            week: 5, status: "soon",
     blurb: "Pick a product mix under resource limits, then compare your plan with the LP optimum." }
