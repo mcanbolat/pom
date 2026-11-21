@@ -107,18 +107,18 @@
       const close = (a, t, dec, tol) => { const x = parseFloat(String(a).replace(/[$,\s%]/g, "")); return isFinite(x) && Math.abs(x - t) <= Math.max(Math.abs(t) * (tol == null ? 0.01 : tol), 0.5 * Math.pow(10, -dec) + 1e-9); };
       const done = () => items.every((it) => st[it.key].ok || st[it.key].tries >= 3);
       const paint = () => items.forEach((it) => {
-        const s = st[it.key], box = document.getElementById("q_" + it.key), inp = document.getElementById("a_" + it.key), f = document.getElementById("f_" + it.key);
+        const s = st[it.key], box = el.querySelector("#q_" + it.key), inp = el.querySelector("#a_" + it.key), f = el.querySelector("#f_" + it.key);
         if (s.ok) { box.className = "qbox good"; inp.disabled = true; f.innerHTML = `<span class="ok">✔ Correct${s.tries === 1 ? " on the first try" : ""}.</span>`; }
         else if (s.tries >= 3) { box.className = "qbox shown"; inp.disabled = true; inp.value = Number(it.truth).toFixed(it.dec); f.textContent = "Out of tries. The answer is shown."; }
         else if (s.tries) f.textContent = `Not quite. ${3 - s.tries} ${3 - s.tries === 1 ? "try" : "tries"} left.`;
       });
-      const btn = document.getElementById("q_check");
+      const btn = el.querySelector("#q_check");
       btn.onclick = () => {
-        items.forEach((it) => { const s = st[it.key]; if (s.ok || s.tries >= 3) return; const v = document.getElementById("a_" + it.key).value.trim(); if (!v) return;
+        items.forEach((it) => { const s = st[it.key]; if (s.ok || s.tries >= 3) return; const v = el.querySelector("#a_" + it.key).value.trim(); if (!v) return;
           s.tries++; s.answers.push(v.slice(0, 20)); s.ok = close(v, it.truth, it.dec, it.tol); });
         paint(); if (done()) { btn.classList.add("hidden"); onDone(st); }
       };
-      items.forEach((it) => document.getElementById("a_" + it.key).addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); }));
+      items.forEach((it) => el.querySelector("#a_" + it.key).addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); }));
     }
   };
   const css = document.createElement("style");

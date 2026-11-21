@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="13";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Mix Puzzle — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=13">
+<script src="../../vendor/supabase.js?v=13"></script>
+<script src="../../vendor/chart.umd.min.js?v=13"></script>
+<script src="../../config.js?v=13"></script>
+<script src="../../pom.js?v=13"></script>
+<script src="../../pom-game.js?v=13"></script>
+<script src="model.js?v=13"></script>
+<style>
+  .big{font-size:20px;font-weight:700;width:110px;text-align:center}
+  .use{display:grid;grid-template-columns:90px 1fr 110px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
+  .use .bar{height:16px;background:var(--soft);border-radius:4px;overflow:hidden}.use .bar div{height:100%}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, tries, chart, t0;
+const C = LP.CONS, M = (v) => POM.money(v);
+
+POMGame.start({
+  game: "lp", chapter: "Mod. B", topic: "Linear Programming", icon: "🧥", title: "Product Mix Puzzle",
+  tagline: "Plan this week's production of hoodies and jackets. Find the mix that earns the most profit without running out of cutting, sewing or finishing time.",
+  defaults: LP.DEFAULTS,
+  bots: () => ["SimplexSue", "CornerCase", "ShadowPrice", "IsoProfit"].map((n, i) => ({ nickname: n, summary: { score: 2700 - i * 150, first: 2200 + i * 100 } })),
+  board: { label: "Best plan's profit", fmt: (v) => M(v), cols: [["First guess", (s) => M(s.first)]] },
+  run(ctx) { X = ctx; tries = ctx.ev("try"); route(); },
+  results: (s) => UI.kpis([["Your first guess", M(s.first)], ["Your best plan", M(s.score)], ["Optimum", M(s.opt) + " (" + s.opt_x + " hoodies, " + s.opt_y + " jackets)"], ["Feasible tries", `${s.feasible} / ${s.tries}`]]) +
+    `<div class="goal small">The jacket earns more per unit, but making only jackets ($2,500) is <b>not</b> optimal. Jackets use 3 hours of finishing, and finishing runs out first. The best mix uses up sewing and finishing completely: those are the <b>binding constraints</b>. Cutting has spare hours (slack), so its shadow price is $0. An extra sewing hour is worth $${LP.shadow(X.P, "sew")}, and an extra finishing hour $${LP.shadow(X.P, "fin")}.</div>`
+});
+
+function route() {
+  if (tries.filter((t) => t.final).length === 0 && tries.length < X.P.tries) return explore();
+  if (X.P.quiz && !X.ev("graph").length) return graph();
+  reflect();
+}
+function usage(x, y) {
+  const c = LP.check(x, y);
+  return c.use.map((u) => `<div class="use"><b>${u.name}</b><div class="bar"><div style="width:${Math.min(100, u.used / u.rhs * 100)}%;background:${u.used > u.rhs ? "#b23a2b" : "#00533e"}"></div></div><span>${+u.used.toFixed(1)} / ${u.rhs} ${u.unit}</span></div>`).join("");
+}
+function problem() {
+  const P = X.P;
+  return `<p>Golden Eagle Apparel makes <b>hoodies</b> (profit <b>${M(P.px)}</b> each) and <b>jackets</b> (profit <b>${M(P.py)}</b> each). Everything you make sells. This week's limits:</p>
+    ${UI.table(["Resource", "Per hoodie", "Per jacket", "Hours available"], C.map((c) => [c.name, c.a + " h", c.b + " h", c.rhs]))}`;
+}
+
+// ---------- 1. explore with intuition (no graph yet) ----------
+function explore() {
+  const P = X.P, left = P.tries - tries.length, best = tries.filter((t) => t.feasible).sort((a, b) => b.profit - a.profit)[0];
+  t0 = t0 || performance.now();
+  X.el.innerHTML = `<div class="grid2"><div class="card"><h2>Plan this week's production</h2>${problem()}
+    <p class="small">You have <b>${left}</b> ${left === 1 ? "try" : "tries"} left. Each try shows whether the plan fits and what it earns. Your score is your best feasible plan.</p>
+    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap"><div><label>Hoodies</label><input id="x" class="big" inputmode="decimal" value="${tries.length ? tries[tries.length - 1].x : ""}"></div>
+      <div><label>Jackets</label><input id="y" class="big" inputmode="decimal" value="${tries.length ? tries[tries.length - 1].y : ""}"></div><button id="bT">Try this plan</button></div>
+    <div id="live" style="margin-top:10px"></div><div class="err" id="eT"></div></div>
+    <div class="card"><h3>Your tries</h3>${tries.length ? UI.table(["#", "Hoodies", "Jackets", "Fits?", "Profit"], tries.map((t, i) => [i + 1, t.x, t.y, t.feasible ? "✔" : `<span style="color:var(--bad)">✘ ${t.violated.map((v) => C.find((c) => c.id === v).name.toLowerCase()).join(", ")}</span>`, t.feasible ? M(t.profit) : "–"])) : `<p class="small muted">No tries yet. What's your first instinct?</p>`}
+      ${best ? `<div class="goal small" style="margin-top:8px">Best so far: <b>${M(best.profit)}</b> (${best.x} hoodies, ${best.y} jackets).</div>` : ""}
+      ${tries.length ? `<button class="ghost" id="bStop" style="margin-top:10px">I'm happy with my best plan →</button>` : ""}</div></div>`;
+  const live = () => { const x = +document.getElementById("x").value || 0, y = +document.getElementById("y").value || 0; document.getElementById("live").innerHTML = usage(x, y); };
+  ["x", "y"].forEach((id) => document.getElementById(id).oninput = live); live();
+  document.getElementById("bT").onclick = async () => {
+    const x = +document.getElementById("x").value, y = +document.getElementById("y").value;
+    if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0 || document.getElementById("x").value === "" || document.getElementById("y").value === "") { document.getElementById("eT").textContent = "Enter two numbers of zero or more."; return; }
+    const c = LP.check(x, y), t = { n: tries.length + 1, x, y, feasible: c.feasible, violated: c.violated, profit: LP.profit(P, x, y), ms: Math.round(performance.now() - t0) };
+    if (tries.length + 1 >= P.tries) t.final = true;
+    document.getElementById("bT").disabled = true;
+    try { await X.log(t.n, "try", t); tries.push(t); route(); } catch (e) { document.getElementById("eT").textContent = e.message; document.getElementById("bT").disabled = false; }
+  };
+  const stop = document.getElementById("bStop");
+  if (stop) stop.onclick = async () => { const last = { ...tries[tries.length - 1], final: true }; try { await X.log(last.n, "try", last); tries[tries.length - 1] = last; route(); } catch (e) {} };
+}
+
+// ---------- 2. graphical method ----------
+function drawGraph(el, showOpt) {
+  const P = X.P, cr = LP.corners(), o = LP.solve(P), cols = ["#3b6fb6", "#d08a00", "#7a5bb5"];
+  const lines = C.map((c, i) => ({ type: "line", label: `${c.name}: ${c.a}H + ${c.b}J ≤ ${c.rhs}`, data: [{ x: 0, y: c.rhs / c.b }, { x: c.rhs / c.a, y: 0 }], borderColor: cols[i], pointRadius: 0, borderWidth: 2 }));
+  const region = { type: "line", label: "Feasible region", data: cr.concat([cr[0]]), backgroundColor: "#00533e22", borderColor: "#00533e66", fill: "shape", pointRadius: 0, borderWidth: 1 };
+  const mine = { type: "scatter", label: "Your tries", data: tries.map((t) => ({ x: t.x, y: t.y })), backgroundColor: tries.map((t) => t.feasible ? "#00533e" : "#b23a2b"), pointRadius: 6 };
+  const ds = [region, ...lines, mine];
+  if (showOpt) { ds.push({ type: "scatter", label: "Corner points", data: cr, backgroundColor: "#18201d", pointRadius: 4 });
+    ds.push({ type: "line", label: `Iso-profit line ${M(o.z)}`, data: [{ x: 0, y: o.z / P.py }, { x: o.z / P.px, y: 0 }], borderColor: "#b23a2b", borderDash: [6, 4], pointRadius: 0 }); }
+  if (chart) chart.destroy();
+  chart = new Chart(el, { type: "scatter", data: { datasets: ds }, options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } },
+    scales: { x: { min: 0, max: 80, title: { display: true, text: "Hoodies (H)" } }, y: { min: 0, max: 110, title: { display: true, text: "Jackets (J)" } } } } });
+}
+function graph() {
+  const P = X.P, o = LP.solve(P);
+  X.el.innerHTML = `<div class="card"><h2>Now solve it with the graphical method</h2>
+    <p class="small">Maximize <b>${P.px}H + ${P.py}J</b>, subject to the three constraints. The shaded area is every plan that fits. Your tries are the dots. The optimal plan is always at a <b>corner point</b> of the feasible region: evaluate the profit at each corner.</p>
+    <div style="height:380px"><canvas id="cG"></canvas></div><div id="qq" style="margin-top:12px"></div><div id="after"></div></div>`;
+  drawGraph(document.getElementById("cG"), false);
+  UI.quiz(document.getElementById("qq"), [{ key: "x", label: "Optimal number of hoodies", truth: o.x, dec: 0, tol: 0 }, { key: "y", label: "Optimal number of jackets", truth: o.y, dec: 0, tol: 0 },
+    { key: "z", label: "Maximum profit ($)", truth: o.z, dec: 0, tol: 0 }], (st) => {
+      drawGraph(document.getElementById("cG"), true);
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">Corner points: ${LP.corners().map((p) => `(${+p.x.toFixed(1)}, ${+p.y.toFixed(1)}) → ${M(LP.profit(P, p.x, p.y))}`).join("; ")}. Best: <b>${o.x} hoodies and ${o.y} jackets = ${M(o.z)}</b>.</div>
+        <h3 style="margin-top:12px">Sensitivity: shadow prices</h3><p class="small">At the optimum, which resources are fully used? If you could get <b>one more hour of sewing</b>, how much would the maximum profit go up?</p><div id="qq2"></div><div id="after2"></div>`;
+      UI.quiz(document.getElementById("qq2"), [{ key: "sp", label: "Shadow price of sewing ($ per hour)", truth: LP.shadow(P, "sew"), dec: 0, tol: 0 },
+        { key: "cut", label: "Unused cutting hours (slack) at the optimum", truth: C[0].rhs - (C[0].a * o.x + C[0].b * o.y), dec: 0, tol: 0 }], async (st2) => {
+          try { await X.log(0, "graph", Object.fromEntries(Object.entries({ ...st, ...st2 }).flatMap(([k, v]) => [[k + "_tries", v.tries], [k + "_ok", v.ok], [k + "_answers", v.answers]]))); } catch (e) {}
+          document.getElementById("after2").innerHTML = `<div class="goal small" style="margin-top:10px">Sewing and finishing are <b>binding</b>. Cutting has ${C[0].rhs - (C[0].a * o.x + C[0].b * o.y)} hours of slack, so its shadow price is $0. One more sewing hour moves the optimum to a new corner and adds <b>$${LP.shadow(P, "sew")}</b>. This only holds within a range, and the range is what the sensitivity report shows.</div>
+            <button class="gold" id="bGo" style="margin-top:10px">Continue →</button>`;
+          document.getElementById("bGo").onclick = reflect;
+        });
+    });
+}
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>What was your first instinct for the plan, and why wasn't it (or was it) optimal?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const P = X.P, o = LP.solve(P), feas = tries.filter((t) => t.feasible), first = tries[0];
+    const s = { score: feas.length ? Math.max(...feas.map((t) => t.profit)) : 0, first: first && first.feasible ? first.profit : 0, first_x: first ? first.x : null, first_y: first ? first.y : null,
+      opt: o.z, opt_x: o.x, opt_y: o.y, tries: tries.length, feasible: feas.length, found_opt: feas.some((t) => t.profit >= o.z - 1e-6) };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>

@@ -19,7 +19,7 @@ window.POM_CATALOG = [
     blurb: "Run a stockroom: choose when and how much to order, balancing holding, ordering, and stockout costs." },
   { key: "queues", prefix: "QUEUE",       chapter: "Mod. D", topic: "Waiting Line Analysis",        title: "Staff the Checkout",            week: 4, status: "live",
     blurb: "Choose the number of servers and trade off the cost of waiting against the cost of service." },
-  { key: "lp", prefix: "MIX",           chapter: "Mod. B", topic: "Linear Programming",           title: "Product Mix Puzzle",            week: 5, status: "soon",
+  { key: "lp", prefix: "MIX",           chapter: "Mod. B", topic: "Linear Programming",           title: "Product Mix Puzzle",            week: 5, status: "live",
     blurb: "Pick a product mix under resource limits, then compare your plan with the LP optimum." }
 ];
 window.POM_GAMES = window.POM_GAMES || {};
