@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="11";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Up! — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=11">
+<script src="../../vendor/supabase.js?v=11"></script>
+<script src="../../vendor/chart.umd.min.js?v=11"></script>
+<script src="../../config.js?v=11"></script>
+<script src="../../pom.js?v=11"></script>
+<script src="../../pom-game.js?v=11"></script>
+<script src="model.js?v=11"></script>
+<style>.big{font-size:22px;font-weight:700;width:140px;text-align:center} .quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px} .quick button{padding:5px 10px;font-size:13px}</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, D, st, rows, chart, t0;
+const M = (v, d) => POM.money(v, d || 0);
+
+POMGame.start({
+  game: "inventory", chapter: "Ch. 12", topic: "Inventory Management", icon: "📦", title: "Order Up! (EOQ & ROP)",
+  tagline: "Run the hoodie stockroom at the campus store. Order too often and you pay ordering costs; order too much and you pay to hold it; run out and you lose sales.",
+  defaults: INV.DEFAULTS,
+  bots: () => ["EOQueen", "ReorderRita", "SafetySam", "JustInTim"].map((n, i) => ({ nickname: n, summary: { score: 2100 + i * 350, lost: i * 30 } })),
+  board: { label: "Total cost", lowerBetter: true, fmt: (v) => M(v), cols: [["Lost sales", (s) => s.lost + " units"]] },
+  run(ctx) { X = ctx; D = INV.demand(ctx.P); rows = ctx.ev("week"); st = rebuild(); route(); },
+  results: (s) => UI.kpis([["Your total cost", M(s.score)], ["EOQ + ROP, no safety stock", M(s.b_eoq)], ["EOQ + ROP with safety stock", M(s.b_ss)], [`Best (Q, R) in hindsight`, M(s.b_best)], ["Orders placed", s.orders], ["Lost sales", s.lost + " units"]]) +
+    `<div class="goal small">EOQ balances ordering cost against holding cost. The reorder point (demand during the lead time) tells you <b>when</b> to order. Because demand varies, ordering at exactly d × L runs out about half the time before the order arrives. Safety stock (z·σ·√L = ${INV.safety(X.P).toFixed(0)} units at about 95% service) protects against that. Here a lost sale costs ${M(X.P.stockout)}, compared with ${M(X.P.h, 2)} a week to hold a unit, so it pays to carry some extra.</div>`
+});
+
+function rebuild() { let s = INV.init(X.P); rows.forEach((r) => { s = INV.step(X.P, s, r.order, r.week, r.demand).state; }); return s; }
+function route() {
+  if (X.P.quiz && !X.ev("quiz").length) return quiz();
+  if (rows.length >= X.P.weeks) return reflect();
+  week();
+}
+function quiz() {
+  const P = X.P, a = INV.annual(P), Q = INV.eoq(P);
+  X.el.innerHTML = `<div class="card"><h2>The hoodie stockroom</h2>
+    <p>Golden Eagle hoodies sell about <b>${P.mean} a week</b> (it varies; standard deviation ${P.sd}), which is <b>${a.D.toLocaleString()} a year</b>. Each order costs <b>${M(P.S)}</b> to place (shipping and paperwork), whatever its size.
+    Holding a hoodie costs <b>${M(P.h, 2)} a week</b> (${M(a.H)} a year). Orders arrive <b>${P.lead} weeks</b> after you place them. If you run out, the sale is lost, costing <b>${M(P.stockout)}</b> in lost profit and goodwill.</p>
+    <p class="small"><span class="formula">EOQ = √(2DS ÷ H)</span> <span class="formula">ROP = d × L</span> <span class="formula">Orders per year = D ÷ Q</span></p>
+    <div id="qq"></div><div id="after"></div></div>`;
+  UI.quiz(document.getElementById("qq"), [{ key: "eoq", label: "EOQ (units, 1 decimal)", truth: Q, dec: 1, tol: 0.003 },
+    { key: "rop", label: "Reorder point, no safety stock (units)", truth: INV.rop(P), dec: 0, tol: 0 },
+    { key: "n", label: "Orders per year at the EOQ (1 decimal)", truth: a.D / Q, dec: 1, tol: 0.01 }], async (s) => {
+      try { await X.log(0, "quiz", Object.fromEntries(Object.entries(s).flatMap(([k, v]) => [[k + "_tries", v.tries], [k + "_ok", v.ok], [k + "_answers", v.answers]]))); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">EOQ = √(2 × ${a.D} × ${P.S} ÷ ${a.H}) = <b>${Q.toFixed(1)}</b>; ROP = ${P.mean} × ${P.lead} = <b>${INV.rop(P)}</b>; about ${(a.D / Q).toFixed(1)} orders a year. Now run the stockroom for ${P.weeks} weeks. You decide every order.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Open the stockroom →</button>`;
+      document.getElementById("bGo").onclick = week;
+    });
+}
+function week() {
+  const P = X.P, w = rows.length + 1, arriving = st.pipe.filter((o) => o.due === w).reduce((s, o) => s + o.q, 0);
+  const cost = rows.reduce((s, r) => s + r.cost.total, 0); t0 = performance.now();
+  X.el.innerHTML = `<div class="grid2"><div class="card"><h2>Week ${w} of ${P.weeks}</h2>
+    ${UI.kpis([["On hand", st.onHand], ["Arriving this week", arriving], ["On order (later)", st.pipe.filter((o) => o.due > w).reduce((s, o) => s + o.q, 0)], ["Inventory position", INV.position(st)]])}
+    <p class="small muted">Inventory position = on hand + everything on order. An order placed now arrives at the start of week ${w + P.lead}.</p>
+    <label for="q">How many hoodies do you order this week? (0 = no order)</label>
+    <div style="display:flex;gap:10px;align-items:center"><input id="q" class="big" inputmode="numeric" value="0"><button id="bW">Run week ${w}</button></div>
+    <div class="quick">${[0, 100, 150, 200, 300].map((v) => `<button class="ghost" data-q="${v}">${v}</button>`).join("")}</div>
+    <div class="err" id="eW"></div>
+    ${rows.length ? `<div class="goal small" style="margin-top:12px">Last week: demand ${rows[rows.length - 1].demand}, sold ${rows[rows.length - 1].sales}${rows[rows.length - 1].lost ? `, <b style="color:var(--bad)">lost ${rows[rows.length - 1].lost} sales</b>` : ""}. Cost: ${M(rows[rows.length - 1].cost.total, 2)}.</div>` : ""}</div>
+    <div class="card"><h3>Cost so far: ${M(cost, 2)}</h3>
+    ${UI.table(["Ordering", "Holding", "Lost sales"], [[M(rows.reduce((s, r) => s + r.cost.order, 0)), M(rows.reduce((s, r) => s + r.cost.holding, 0), 2), M(rows.reduce((s, r) => s + r.cost.stockout, 0))]])}
+    <div style="height:240px;margin-top:10px"><canvas id="cI"></canvas></div></div></div>`;
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById("cI"), { type: "bar", data: { labels: rows.map((r) => "W" + r.week), datasets: [
+    { type: "line", label: "On hand (end of week)", data: rows.map((r) => r.on_hand), borderColor: "#00533e" },
+    { label: "Demand", data: rows.map((r) => r.demand), backgroundColor: "#d08a0066" },
+    { label: "Lost sales", data: rows.map((r) => r.lost), backgroundColor: "#b23a2b" }] },
+    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } } } });
+  const inp = document.getElementById("q"); inp.select();
+  X.el.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => { inp.value = b.dataset.q; });
+  const go = async () => {
+    const q = Math.round(+inp.value.replace(/,/g, "")); if (!isFinite(q) || q < 0 || q > 2000) { document.getElementById("eW").textContent = "Enter 0–2,000."; return; }
+    const posBefore = INV.position(st), onHandBefore = st.onHand + arriving;
+    const r = INV.step(P, st, q, w, D[w - 1]), row = { ...r.row, position_before: posBefore, on_hand_start: onHandBefore, ms: Math.round(performance.now() - t0) };
+    document.getElementById("bW").disabled = true;
+    try { await X.log(w, "week", row); rows.push(row); st = r.state; route(); }
+    catch (e) { document.getElementById("eW").textContent = e.message; document.getElementById("bW").disabled = false; }
+  };
+  document.getElementById("bW").onclick = go; inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+}
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>What rule did you use to decide when to order and how much?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const b = INV.benchmarks(X.P), ord = rows.filter((r) => r.order > 0);
+    const s = { score: +rows.reduce((t, r) => t + r.cost.total, 0).toFixed(2), b_eoq: b.eoq.total, b_ss: b.eoq_ss.total, b_best: b.best.total, best_Q: b.best.Q, best_R: b.best.R,
+      orders: ord.length, avg_q: ord.length ? Math.round(ord.reduce((t, r) => t + r.order, 0) / ord.length) : 0, avg_pos_at_order: ord.length ? Math.round(ord.reduce((t, r) => t + r.position_before, 0) / ord.length) : null,
+      lost: rows.reduce((t, r) => t + r.lost, 0), avg_on_hand: Math.round(rows.reduce((t, r) => t + r.on_hand, 0) / rows.length) };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>

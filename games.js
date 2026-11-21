@@ -15,7 +15,7 @@ window.POM_CATALOG = [
     blurb: "Spend a budget to add capacity to a multi-step process and maximize throughput." },
   { key: "layout", prefix: "LINE",       chapter: "Ch. 9",  topic: "Layout Strategies",            title: "Line Balancing Puzzle",         week: 3, status: "live",
     blurb: "Assign tasks to workstations, respecting precedence and cycle time, and reach high efficiency." },
-  { key: "inventory", prefix: "INV",    chapter: "Ch. 12", topic: "Inventory Management",         title: "Order Up! (EOQ & ROP)",         week: 4, status: "soon",
+  { key: "inventory", prefix: "INV",    chapter: "Ch. 12", topic: "Inventory Management",         title: "Order Up! (EOQ & ROP)",         week: 4, status: "live",
     blurb: "Run a stockroom: choose when and how much to order, balancing holding, ordering, and stockout costs." },
   { key: "queues", prefix: "QUEUE",       chapter: "Mod. D", topic: "Waiting Line Analysis",        title: "Staff the Checkout",            week: 4, status: "soon",
     blurb: "Choose the number of servers and trade off the cost of waiting against the cost of service." },
