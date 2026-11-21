@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="9";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find the Bottleneck — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=9">
+<script src="../../vendor/supabase.js?v=9"></script>
+<script src="../../vendor/chart.umd.min.js?v=9"></script>
+<script src="../../config.js?v=9"></script>
+<script src="../../pom.js?v=9"></script>
+<script src="../../pom-game.js?v=9"></script>
+<script src="model.js?v=9"></script>
+<style>
+  .flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin:10px 0}
+  .st{flex:1;min-width:120px;border:2px solid var(--green);border-radius:10px;padding:8px;text-align:center;background:#fff;position:relative}
+  .st.bn{border-color:var(--bad);background:#fbeceb}
+  .st .nm{font-weight:700} .st .cp{font-family:Fraunces,Georgia,serif;font-size:22px;font-weight:700}
+  .st .ut{height:6px;background:var(--soft);border-radius:3px;margin-top:6px;overflow:hidden}.st .ut div{height:100%;background:var(--green)}
+  .arrow{align-self:center;color:var(--muted);font-size:20px}
+  .step{display:inline-flex;align-items:center;gap:4px;margin-top:6px}.step button{padding:2px 9px}
+  .chk{display:flex;flex-wrap:wrap;gap:10px}.chk label{display:flex;gap:4px;align-items:center;margin:0;color:var(--ink);font-size:14px}.chk input{width:auto}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, rows, buy = {}, t0;
+const S = CAP.STATIONS, M = (v) => POM.money(v), f1 = (v) => (+v).toFixed(1).replace(/\.0$/, "");
+
+POMGame.start({
+  game: "capacity", chapter: "Ch. 7", topic: "Capacity & Constraints", icon: "🍕", title: "Find the Bottleneck",
+  tagline: "Grow Golden Eagle Pizza. Each month, decide where to add capacity. Money spent anywhere but the bottleneck is wasted.",
+  defaults: CAP.DEFAULTS,
+  bots: () => ["Goldratt", "TOCtopus", "PizzaFlow", "ConstraintCat"].map((n, i) => ({ nickname: n, summary: { score: 169600 - i * 9000, wasted: i * 4000 } })),
+  board: { label: "Total profit", fmt: (v) => M(v), cols: [["Wasted investment", (s) => M(s.wasted)]] },
+  run(ctx) { X = ctx; rows = ctx.ev("month"); route(); },
+  results: (s) => UI.kpis([["Your total profit", M(s.score)], ["Bottleneck strategy", M(s.toc)], ["Final capacity", f1(s.final_cap) + " pizzas/hr"], ["Wasted investment", M(s.wasted)], ["Lost sales", POM.fmt(s.lost_units) + " pizzas"]]) +
+    `<div class="goal small">A process can't produce faster than its slowest step. Adding capacity anywhere else adds cost but no output. Once you fix one bottleneck, another step becomes the bottleneck, so you have to keep looking. Capacity beyond demand is wasted too. That is the theory of constraints: <b>identify</b> the constraint, <b>exploit</b> it, <b>subordinate</b> everything else to it, <b>elevate</b> it, and <b>repeat</b>.</div>`
+});
+
+const servers = () => rows.length ? rows[rows.length - 1].servers : CAP.base();
+const cash = () => X.P.budget * (rows.length + 1) - rows.reduce((t, r) => t + r.spend, 0);
+function route() {
+  if (X.P.quiz && !X.ev("quiz").length) return quiz();
+  if (rows.length >= X.P.months) return reflect();
+  decide();
+}
+function flow(sv, last, showBN) {
+  const a = CAP.analyse(sv);
+  return `<div class="flow">${S.map((s, i) => `${i ? '<span class="arrow">→</span>' : ""}<div class="st ${showBN && a.bottleneck === s.id ? "bn" : ""}">
+    <div class="nm">${s.name}</div><div class="small muted">${s.min} min per pizza · ${sv[s.id]} ${s.unit}${sv[s.id] > 1 ? "s" : ""}</div>
+    ${showBN ? `<div class="cp">${f1(a.caps[i])}</div><div class="small muted">pizzas / hour</div>` : ""}
+    ${last ? `<div class="ut" title="utilization"><div style="width:${Math.min(100, last.util[i] * 100)}%"></div></div><div class="small">${Math.round(last.util[i] * 100)}% busy</div>` : ""}
+    ${showBN && buy ? `<div class="step"><button class="ghost" data-s="${s.id}" data-d="-1">−</button><b>+${buy[s.id] || 0}</b><button class="ghost" data-s="${s.id}" data-d="1">+</button></div><div class="small muted">${M(s.cost)} each</div>` : ""}
+  </div>`).join("")}</div>`;
+}
+
+// ---------- 1. analyze the process ----------
+function quiz() {
+  const a = CAP.analyse(CAP.base());
+  X.el.innerHTML = `<div class="card"><h2>Golden Eagle Pizza: analyze the process</h2>
+    <p>Every pizza goes through five steps in order. Some steps have several workers, ovens or drivers working in parallel.</p>${flow(CAP.base(), null, false)}
+    <p class="small"><span class="formula">Capacity of a step = (60 ÷ minutes per pizza) × number working in parallel</span> <span class="formula">Throughput time = total minutes one pizza spends in the process</span></p>
+    <label>Which step is the bottleneck?</label><div class="chk">${S.map((s) => `<label><input type="radio" name="bn" value="${s.id}">${s.name}</label>`).join("")}</div>
+    <div id="qq" style="margin-top:10px"></div><div id="after"></div></div>`;
+  UI.quiz(document.getElementById("qq"), [{ key: "cap", label: "Process capacity (pizzas per hour)", truth: a.C, dec: 1, tol: 0.001 },
+    { key: "bt", label: "Bottleneck time (minutes per pizza, 2 decimals)", truth: a.bottleneck_time, dec: 2, tol: 0.002 },
+    { key: "tt", label: "Throughput time (minutes)", truth: a.throughput_time, dec: 0, tol: 0 }], async (st) => {
+      const pick = (X.el.querySelector("input[name=bn]:checked") || {}).value, ok = pick === a.bottleneck;
+      X.el.querySelectorAll("input[name=bn]").forEach((r) => r.disabled = true);
+      try { await X.log(0, "quiz", { bn: pick, bn_ok: ok, cap_tries: st.cap.tries, cap_ok: st.cap.ok, bt_tries: st.bt.tries, bt_ok: st.bt.ok, tt_tries: st.tt.tries, tt_ok: st.tt.ok }); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">${ok ? "✔" : "✘"} The bottleneck is <b>delivery</b>: 3 drivers × 60/20 = <b>${a.C} pizzas/hour</b>. Every other step can go faster, but pizzas pile up waiting for a driver. Bottleneck time = 20 ÷ 3 = ${a.bottleneck_time.toFixed(2)} min; throughput time = 4 + 3 + 12 + 2 + 20 = ${a.throughput_time} min.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Run the shop →</button>`;
+      document.getElementById("bGo").onclick = decide;
+    });
+}
+
+// ---------- 2. monthly investment ----------
+function decide() {
+  const P = X.P, m = rows.length + 1, sv = servers(), d = CAP.demandAt(P, m), last = rows[rows.length - 1];
+  const spend = S.reduce((t, s) => t + (buy[s.id] || 0) * s.cost, 0), after = { ...sv }; S.forEach((s) => after[s.id] += buy[s.id] || 0);
+  const a2 = CAP.analyse(after);
+  t0 = t0 || performance.now();
+  X.el.innerHTML = `<div class="card"><h2>Month ${m} of ${P.months}</h2>
+    <p>Demand this month: <b>${d} pizzas/hour</b>${m === P.grow_at ? ` <b style="color:var(--bad)">(up from ${P.demand1}: a new dorm opened!)</b>` : ""}. Each pizza earns <b>${M(P.margin)}</b>, and the shop is open ${P.hours} hours a month.
+    You have <b>${M(cash())}</b> to invest (${M(P.budget)} more arrives each month, and unspent money carries over).</p>
+    ${flow(sv, last, true)}
+    ${UI.kpis([["Spending now", M(spend)], ["Capacity after buying", f1(a2.C) + "/hr"], ["Expected output", f1(Math.min(a2.C, d)) + "/hr"], ["Cash left", M(cash() - spend)]])}
+    <button id="bRun" class="full" ${spend > cash() ? "disabled" : ""}>Run month ${m}</button><div class="err" id="eRun">${spend > cash() ? "Not enough cash." : ""}</div></div>
+    ${rows.length ? `<div class="card"><h3>History</h3>${UI.table(["Month", "Bought", "Capacity", "Demand", "Output", "Bottleneck", "Profit"],
+      rows.map((r) => [r.month, Object.entries(r.buy).filter(([, k]) => k).map(([id, k]) => `${k}× ${S.find((s) => s.id === id).name.toLowerCase()}`).join(", ") || "–", f1(r.capacity), r.demand, f1(r.output), S.find((s) => s.id === r.bottleneck).name, M(r.profit)]))}</div>` : ""}`;
+  X.el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => { buy[b.dataset.s] = Math.max(0, Math.min(5, (buy[b.dataset.s] || 0) + +b.dataset.d)); decide(); });
+  document.getElementById("bRun").onclick = async () => {
+    const r = { ...CAP.month(P, sv, buy, m), cash_before: cash(), ms: Math.round(performance.now() - t0) };
+    document.getElementById("bRun").disabled = true;
+    try { await X.log(m, "month", r); rows.push(r); buy = {}; t0 = null; result(r); }
+    catch (e) { document.getElementById("eRun").textContent = e.message; document.getElementById("bRun").disabled = false; }
+  };
+}
+function result(r) {
+  const bn = S.find((s) => s.id === r.bottleneck).name;
+  X.el.innerHTML = `<div class="card"><h2>Month ${r.month} results</h2>${flow(r.servers, r, false)}
+    ${UI.kpis([["Output", f1(r.output) + "/hr"], ["Demand", r.demand + "/hr"], ["Lost sales", f1(r.lost) + "/hr"], ["Profit this month", M(r.profit)]])}
+    <div class="goal small">${r.lost > 0 ? `You turned away ${f1(r.lost)} pizzas an hour. The bottleneck was <b>${bn}</b>.` : `You met all demand. Capacity (${f1(r.capacity)}/hr) was at least as high as demand.`}
+    ${r.wasted ? ` <b style="color:var(--bad)">${M(r.wasted)} of your spending did not raise output this month.</b>` : ""} The bars show how busy each step was. The bottleneck is the step closest to 100%.</div>
+    <button class="gold full" id="bN" style="margin-top:10px">${r.month >= X.P.months ? "Finish →" : "Next month →"}</button></div>`;
+  document.getElementById("bN").onclick = route;
+}
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>How did you decide where to invest each month?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const toc = CAP.tocPlan(X.P), last = rows[rows.length - 1];
+    const s = { score: rows.reduce((t, r) => t + r.profit, 0), toc: toc.reduce((t, r) => t + r.profit, 0), wasted: rows.reduce((t, r) => t + r.wasted, 0),
+      final_cap: last.capacity, lost_units: Math.round(rows.reduce((t, r) => t + r.lost * X.P.hours, 0)), spend: rows.reduce((t, r) => t + r.spend, 0) };
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>

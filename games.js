@@ -11,7 +11,7 @@ window.POM_CATALOG = [
     blurb: "Meet the deadline at the lowest cost by crashing the right activities on the critical path." },
   { key: "forecasting", prefix: "FCST",  chapter: "Ch. 4",  topic: "Forecasting",                  title: "Forecasting Contest",           week: 2, status: "live",
     blurb: "Forecast next period's demand and compete with moving averages and exponential smoothing on MAD."},
-  { key: "capacity", prefix: "CAP",     chapter: "Ch. 7",  topic: "Capacity & Constraint Mgmt",   title: "Find the Bottleneck",           week: 3, status: "soon",
+  { key: "capacity", prefix: "CAP",     chapter: "Ch. 7",  topic: "Capacity & Constraint Mgmt",   title: "Find the Bottleneck",           week: 3, status: "live",
     blurb: "Spend a budget to add capacity to a multi-step process and maximize throughput." },
   { key: "layout", prefix: "LINE",       chapter: "Ch. 9",  topic: "Layout Strategies",            title: "Line Balancing Puzzle",         week: 3, status: "soon",
     blurb: "Assign tasks to workstations, respecting precedence and cycle time, and reach high efficiency." },
