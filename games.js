@@ -9,7 +9,7 @@ window.POM_CATALOG = [
     blurb: "Watch a process run and call it in or out of control. Be quick, but avoid false alarms." },
   { key: "project", prefix: "PROJ",      chapter: "Ch. 3",  topic: "Project Management",           title: "Crash the Project",             week: 2, status: "live",
     blurb: "Meet the deadline at the lowest cost by crashing the right activities on the critical path." },
-  { key: "forecasting", prefix: "FCST",  chapter: "Ch. 4",  topic: "Forecasting",                  title: "Forecasting Contest",           week: 2, status: "soon",
+  { key: "forecasting", prefix: "FCST",  chapter: "Ch. 4",  topic: "Forecasting",                  title: "Forecasting Contest",           week: 2, status: "live",
     blurb: "Forecast next period's demand and compete with moving averages and exponential smoothing on MAD."},
   { key: "capacity", prefix: "CAP",     chapter: "Ch. 7",  topic: "Capacity & Constraint Mgmt",   title: "Find the Bottleneck",           week: 3, status: "soon",
     blurb: "Spend a budget to add capacity to a multi-step process and maximize throughput." },

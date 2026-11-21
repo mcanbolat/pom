@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>/* auto-refresh when a newer version is published */
+(function(){var V="8";fetch("../../version.txt?"+Date.now(),{cache:"no-store"}).then(function(r){return r.text()}).then(function(v){v=v.trim();if(v&&v!==V){var k="pom_reload_"+v;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,1)}catch(e){}location.reload()}}).catch(function(){})})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forecasting Contest — POM Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../pom.css?v=8">
+<script src="../../vendor/supabase.js?v=8"></script>
+<script src="../../vendor/chart.umd.min.js?v=8"></script>
+<script src="../../config.js?v=8"></script>
+<script src="../../pom.js?v=8"></script>
+<script src="../../pom-game.js?v=8"></script>
+<script src="model.js?v=8"></script>
+<style>.big{font-size:22px;font-weight:700;width:160px;text-align:center}</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+let X, C, mine, chart, t0;
+const R0 = (v) => v == null ? "–" : Math.round(v).toLocaleString(), f1 = (v) => v == null ? "–" : v.toFixed(1);
+
+POMGame.start({
+  game: "forecasting", chapter: "Ch. 4", topic: "Forecasting", icon: "🔮", title: "Forecasting Contest",
+  tagline: "Forecast monthly demand for a campus coffee chain, one month at a time, and try to beat the classic forecasting methods.",
+  defaults: FCST.DEFAULTS,
+  bots: () => ["TrendTracker", "AlphaOne", "MovingMo", "NaiveNate"].map((n, i) => ({ nickname: n, summary: { score: 38 + i * 4, mape: 7 + i } })),
+  board: { label: "Your MAD", lowerBetter: true, fmt: (v) => v.toFixed(1), cols: [["MAPE", (s) => s.mape.toFixed(1) + "%"]] },
+  run(ctx) { X = ctx; C = FCST.contest(ctx.P); mine = ctx.ev("forecast"); route(); },
+  results: (s) => UI.kpis([["Your MAD", f1(s.score)], ["Naive MAD", f1(s.mad_naive)], ["3-month MA MAD", f1(s.mad_ma)], [`Exp. smoothing (α=${X.P.alpha}) MAD`, f1(s.mad_es)], ["Your MAPE", f1(s.mape) + "%"],
+      ["Your implied α", s.alpha == null ? "–" : s.alpha.toFixed(2)]]) +
+    `<div class="goal small">${s.beat} of 3 methods beaten. <b>Your implied α</b> measures how strongly you reacted to your last error. 0 means you ignored new data; 1 means you jumped all the way to the last actual (like the naive method). A high α reacts quickly to real changes but also chases noise. A low α is smooth but slow to adjust after demand shifts (demand jumped in month ${X.P.history + X.P.jump_at}).</div>`
+});
+
+function route() {
+  if (X.P.quiz && !X.ev("quiz").length) return quiz();
+  if (mine.length >= X.P.rounds) return reflect();
+  round();
+}
+function histTable() { const h = C.d.slice(0, X.P.history); return `<div class="scroll">${UI.table(["Month", ...h.map((_, i) => i + 1)], [["Demand", ...h]])}</div>`; }
+
+function quiz() {
+  const P = X.P, h = C.d.slice(0, P.history), F12 = C.m.es[P.history - 1], A12 = h[P.history - 1];
+  const ma = (h[P.history - 1] + h[P.history - 2] + h[P.history - 3]) / 3, es = F12 + P.alpha * (A12 - F12);
+  X.el.innerHTML = `<div class="card"><h2>Brewed Awakening: monthly demand (cups, in hundreds)</h2>
+    <p>You are the new demand planner. Here are the last ${P.history} months:</p>${histTable()}
+    <div style="height:220px;margin-top:10px"><canvas id="cH"></canvas></div>
+    <h3 style="margin-top:14px">Warm-up: forecast month ${P.history + 1} with two textbook methods</h3>
+    <p class="small"><span class="formula">3-month moving average = (A${P.history - 2} + A${P.history - 1} + A${P.history}) ÷ 3</span>
+    <span class="formula">Exponential smoothing: F${P.history + 1} = F${P.history} + α(A${P.history} − F${P.history})</span>, with α = ${P.alpha} and last month's forecast F${P.history} = ${F12.toFixed(1)}.</p>
+    <div id="qq"></div><div id="after"></div></div>`;
+  new Chart(document.getElementById("cH"), { type: "line", data: { labels: h.map((_, i) => i + 1), datasets: [{ label: "Demand", data: h, borderColor: "#00533e" }] }, options: { maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } } } });
+  UI.quiz(document.getElementById("qq"), [{ key: "ma", label: "3-month moving average forecast (1 decimal)", truth: ma, dec: 1, tol: 0.001 },
+    { key: "es", label: "Exponential smoothing forecast (1 decimal)", truth: es, dec: 1, tol: 0.001 }], async (st) => {
+      try { await X.log(0, "quiz", { ma_tries: st.ma.tries, ma_ok: st.ma.ok, ma_answers: st.ma.answers, es_tries: st.es.tries, es_ok: st.es.ok, es_answers: st.es.answers }); } catch (e) {}
+      document.getElementById("after").innerHTML = `<div class="goal small" style="margin-top:10px">Now it's your turn. For the next ${P.rounds} months you'll make your own forecast, see what actually happened, and compete on <b>MAD</b> (mean absolute deviation) against the naive method, a 3-month moving average, and exponential smoothing. Use any method you like.</div>
+        <button class="gold" id="bGo" style="margin-top:10px">Start forecasting →</button>`;
+      document.getElementById("bGo").onclick = round;
+    });
+}
+
+function round() {
+  const P = X.P, k = mine.length, month = P.history + k + 1;
+  const known = C.d.slice(0, P.history + k), fc = mine.map((r) => r.forecast);
+  t0 = performance.now();
+  X.el.innerHTML = `<div class="grid2"><div class="card"><h2>Month ${month}: your forecast (${k + 1} of ${P.rounds})</h2>
+    <div style="height:260px"><canvas id="cF"></canvas></div>
+    <label for="fIn">Your forecast for month ${month}</label>
+    <div style="display:flex;gap:10px;align-items:center"><input id="fIn" class="big" inputmode="numeric" autocomplete="off"><button id="bF">Submit</button></div>
+    <div class="err" id="eF"></div><div id="rev"></div></div>
+    <div class="card"><h3>Scoreboard: MAD so far (lower is better)</h3><div id="sb">${scoreboard()}</div>
+    <h3 style="margin-top:12px">Data</h3><div class="scroll">${UI.table(["Month", "Actual", "You", "Naive", "3-mo MA", "Exp. sm."],
+      known.map((a, i) => [i + 1, a, i >= P.history ? R0(fc[i - P.history]) : "", R0(C.m.naive[i]), R0(C.m.ma[i]), R0(C.m.es[i])]).reverse().slice(0, 10))}</div></div></div>`;
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById("cF"), { type: "line", data: { labels: [...known.map((_, i) => i + 1), month], datasets: [
+    { label: "Actual demand", data: known, borderColor: "#00533e", backgroundColor: "#00533e" },
+    { label: "Your forecasts", data: [...Array(P.history).fill(null), ...fc], borderColor: "#d08a00", backgroundColor: "#d08a00", borderDash: [5, 3] }] },
+    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom" } } } });
+  const inp = document.getElementById("fIn"); inp.focus();
+  const submit = async () => {
+    const v = parseFloat(inp.value.replace(/,/g, "")); if (!isFinite(v) || v < 0 || v > 5000) { document.getElementById("eF").textContent = "Enter a number between 0 and 5,000."; return; }
+    const i = k, a = C.actual[i];
+    const row = { round: k + 1, month, forecast: v, actual: a, error: a - v, abs_error: Math.abs(a - v), naive: C.naive[i], ma: C.ma[i], es: C.es[i],
+      prev_forecast: k ? mine[k - 1].forecast : null, prev_error: k ? mine[k - 1].error : null, last_actual: known[known.length - 1], ms: Math.round(performance.now() - t0) };
+    document.getElementById("bF").disabled = true; inp.disabled = true;
+    try { await X.log(k + 1, "forecast", row); mine.push(row); } catch (e) { document.getElementById("eF").textContent = e.message; document.getElementById("bF").disabled = false; inp.disabled = false; return; }
+    document.getElementById("rev").innerHTML = `<div class="goal" style="margin-top:12px">Actual demand in month ${month}: <b>${a}</b>. Your error: <b>${a - v > 0 ? "+" : ""}${Math.round(a - v)}</b>.
+      The methods forecast: naive ${R0(row.naive)}, 3-mo MA ${R0(row.ma)}, exp. smoothing ${R0(row.es)}.</div>
+      <button class="gold" id="bN" style="margin-top:10px">${k + 1 >= P.rounds ? "Finish →" : "Next month →"}</button>`;
+    document.getElementById("sb").innerHTML = scoreboard();
+    document.getElementById("bN").onclick = route; document.getElementById("bN").focus();
+  };
+  document.getElementById("bF").onclick = submit; inp.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+}
+function scoreboard() {
+  if (!mine.length) return `<p class="small muted">Make your first forecast.</p>`;
+  const n = mine.length, act = mine.map((r) => r.actual);
+  const rows = [["You", FCST.mad(mine.map((r) => r.forecast), act)], ["Naive", FCST.mad(C.naive.slice(0, n), act)], ["3-month MA", FCST.mad(C.ma.slice(0, n), act)], [`Exp. smoothing (α=${X.P.alpha})`, FCST.mad(C.es.slice(0, n), act)]]
+    .sort((a, b) => a[1] - b[1]);
+  return UI.table(["#", "Forecaster", "MAD"], rows.map((r, i) => [i + 1, r[0] === "You" ? "<b>You</b>" : r[0], r[0] === "You" ? `<b>${f1(r[1])}</b>` : f1(r[1])]));
+}
+function reflect() {
+  X.el.innerHTML = `<div class="card" style="max-width:640px;margin:20px auto"><h2>Before you see the results</h2>
+    <p>What method or rule of thumb did you use? Did you change it when demand jumped?</p><textarea id="refl" rows="4" maxlength="1500"></textarea>
+    <button id="bFin" class="full" style="margin-top:12px">Finish and see results</button><div class="err" id="eFin"></div></div>`;
+  document.getElementById("bFin").onclick = async () => {
+    const act = mine.map((r) => r.actual), fc = mine.map((r) => r.forecast), n = mine.length;
+    const s = { score: FCST.mad(fc, act), mape: FCST.mape(fc, act), mad_naive: FCST.mad(C.naive.slice(0, n), act), mad_ma: FCST.mad(C.ma.slice(0, n), act), mad_es: FCST.mad(C.es.slice(0, n), act),
+      bias: mine.reduce((t, r) => t + r.error, 0) / n, alpha: FCST.impliedAlpha(fc, act) };
+    s.beat = [s.mad_naive, s.mad_ma, s.mad_es].filter((m) => s.score < m).length;
+    try { await X.log(0, "reflection", { text: document.getElementById("refl").value.trim().slice(0, 1500) }); await X.finish(s); }
+    catch (e) { document.getElementById("eFin").textContent = e.message; }
+  };
+}
+</script>
+</body>
+</html>
