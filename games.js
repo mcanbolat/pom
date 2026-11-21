@@ -13,7 +13,7 @@ window.POM_CATALOG = [
     blurb: "Forecast next period's demand and compete with moving averages and exponential smoothing on MAD."},
   { key: "capacity", prefix: "CAP",     chapter: "Ch. 7",  topic: "Capacity & Constraint Mgmt",   title: "Find the Bottleneck",           week: 3, status: "live",
     blurb: "Spend a budget to add capacity to a multi-step process and maximize throughput." },
-  { key: "layout", prefix: "LINE",       chapter: "Ch. 9",  topic: "Layout Strategies",            title: "Line Balancing Puzzle",         week: 3, status: "soon",
+  { key: "layout", prefix: "LINE",       chapter: "Ch. 9",  topic: "Layout Strategies",            title: "Line Balancing Puzzle",         week: 3, status: "live",
     blurb: "Assign tasks to workstations, respecting precedence and cycle time, and reach high efficiency." },
   { key: "inventory", prefix: "INV",    chapter: "Ch. 12", topic: "Inventory Management",         title: "Order Up! (EOQ & ROP)",         week: 4, status: "soon",
     blurb: "Run a stockroom: choose when and how much to order, balancing holding, ordering, and stockout costs." },
